@@ -1,0 +1,27 @@
+# Normalize text files to LF in the repo and on checkout,
+# so Windows and Linux contributors produce identical diffs.
+* text=auto eol=lf
+
+# Windows-only scripts need CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files: never diff or convert
+*.cbz binary
+*.cbr binary
+*.cb7 binary
+*.zip binary
+*.rar binary
+*.7z binary
+*.pdf binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary
+*.avif binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary

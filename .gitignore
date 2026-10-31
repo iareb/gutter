@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+
+# Frontend build output
+dist/
+build/
+.svelte-kit/
+*.tsbuildinfo
+.vite/
+
+# Rust / Tauri
+target/
+src-tauri/gen/schemas/
+
+# Tests and benchmarks
+coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+bench-results/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+*.p12
+*.pem
+*.key
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Claude Code local settings
+.claude/settings.local.json
+CLAUDE.local.md
