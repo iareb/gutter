@@ -21,6 +21,14 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# Full debug info made the Android dev APK ~300 MB, slow to install over Wi-Fi.
+# Keep file:line in backtraces for our code, drop the rest.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 # https://v2.tauri.app/concept/size/#cargo-configuration
 [profile.release]
 codegen-units = 1
