@@ -20,6 +20,18 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+# Only stored and deflate entries: other codecs pull in C code that slows Android builds
+zip = { version = "9", default-features = false, features = ["deflate"] }
+
+# Full debug info made the Android dev APK ~300 MB, slow to install over Wi-Fi.
+# Keep file:line in backtraces for our code, drop the rest.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
 
 # https://v2.tauri.app/concept/size/#cargo-configuration
 [profile.release]
