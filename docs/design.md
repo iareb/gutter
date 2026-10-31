@@ -202,7 +202,7 @@ Development happens on Windows and Linux; builds for all platforms are produced 
 | macOS | macOS runner only | DMG on GitHub Releases |
 | iOS | macOS runner only | TestFlight; requires an Apple Developer account ($99/year) |
 
-CI pipeline on every pull request: lint, type check, unit tests, desktop build. On every version tag: build all platforms and publish the release.
+CI pipeline on every push to `main`: lint, type check, unit tests, desktop build. On every version tag: build all platforms and publish the release.
 
 License: MIT.
 
@@ -212,18 +212,18 @@ The code is written by coding agents (Claude Code). The person leading the proje
 
 **Working rules**
 
-- An `AGENTS.md` at the repo root summarizes this document: architecture, rules (e.g. "no image recompression"), build and test commands, how to open a PR. It is the format read by most coding agents, so anyone who clones or forks can work with the agent they prefer.
+- An `AGENTS.md` at the repo root summarizes this document: architecture, rules (e.g. "no image recompression"), build and test commands, workflow. It is the format read by most coding agents, so anyone who clones or forks can work with the agent they prefer.
 - `CLAUDE.md` starts with the line `@AGENTS.md`, which imports that file into Claude Code. Instructions live in one place and cannot diverge; any Claude Code–specific notes go below that line.
-- `AGENTS.md` is updated in the same PR that changes architecture, commands or rules.
-- Work in small pull requests, one per feature. Each PR says what changes for the user and how to try it in under 5 minutes.
-- CI must be green before merging: lint, type check, tests, build. A red CI is a signal that doesn't require understanding the code.
-- When a choice in this document turns out wrong, the agent updates the document in the same PR and explains why in plain language.
+- `AGENTS.md` is updated in the same change that alters architecture, commands or rules.
+- Single maintainer, no pull requests: work lands directly on `main` in small steps, one per feature. The agent prepares each change; the maintainer commits and pushes it. Each step comes with what changes for the user and how to try it in under 5 minutes. See [roadmap.md](roadmap.md).
+- CI runs on every push: lint, type check, tests, build. A red CI is fixed before anything else, and it is a signal that doesn't require understanding the code.
+- When a choice in this document turns out wrong, the agent updates the document in the same change and explains why in plain language.
 
 **How to validate without reading code**
 
 | What | Tool | What the validator looks at |
 | --- | --- | --- |
-| Image quality | Automated test: pixel-by-pixel comparison between the rendered page and the original | Pass/fail in CI; side-by-side screenshots attached to the PR |
+| Image quality | Automated test: pixel-by-pixel comparison between the rendered page and the original | Pass/fail in CI; side-by-side screenshots shown with each change |
 | Performance | Benchmark command that prints the metrics from the targets table | Numbers against thresholds: green or red |
 | Memory | Benchmark that flips through a 200-page volume and measures the peak | A number in MB |
 | Gestures | Tests with recorded event sequences + manual testing | Manual test checklist per milestone |

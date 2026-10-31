@@ -33,7 +33,7 @@ A page flows: Rust reads only the requested entry from the archive → served to
 
 ## Hard rules
 
-These come from the project's goals. Do not break them without updating the design doc in the same PR.
+These come from the project's goals. Do not break them without updating the design doc in the same change.
 
 - **Never recompress or downscale pages for reading.** No JPEG re-encoding, no reduced-quality cache. Thumbnails exist only in the library.
 - **Render at physical resolution:** CSS size × `devicePixelRatio` × zoom. After a zoom gesture ends, decode again from the original bytes; never upscale an already-reduced bitmap.
@@ -44,19 +44,21 @@ These come from the project's goals. Do not break them without updating the desi
 
 ## Commands
 
-The app is not scaffolded yet. The scaffolding PR (milestone M0) must fill this section with the exact commands for: install, dev run, lint, type check, unit tests, end-to-end tests, desktop build, Android build.
+The app is not scaffolded yet. The scaffolding step (milestone M0) must fill this section with the exact commands for: install, dev run, lint, type check, unit tests, end-to-end tests, desktop build, Android build.
 
 ## Workflow
 
-- Small pull requests, one feature each.
-- Every PR description states **what changes for the user** and **how to try it in under 5 minutes**.
-- CI must be green before merging: lint, type check, tests, build.
+Single maintainer, no pull requests: work lands directly on `main`. The plan, step by step, is in [docs/roadmap.md](docs/roadmap.md).
+
+- **Never commit or push.** Make the change, then hand the maintainer a commit message, **what changes for the user** and **how to try it in under 5 minutes**. They commit and push.
+- Small steps, one feature each.
+- CI runs on every push to `main`: lint, type check, tests, build. A red CI is fixed before anything else.
 - The maintainer validates behavior, not code. Prefer evidence they can check without reading code: test results, benchmark numbers against the targets in the design doc, before/after screenshots.
 - A reported gesture bug becomes a recorded event sequence and a regression test.
-- When a decision in the design doc turns out wrong, update `docs/design.md` in the same PR and explain why in plain language.
-- Update this file in the same PR that changes architecture, commands or rules.
+- When a decision in the design doc turns out wrong, update `docs/design.md` in the same change and explain why in plain language.
+- Update this file in the same change that alters architecture, commands or rules.
 
 ## Conventions
 
-- English for code, comments, commits, PRs and docs.
+- English for code, comments, commits and docs.
 - LF line endings (enforced by `.gitattributes`), formatting per `.editorconfig`.
