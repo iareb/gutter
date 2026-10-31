@@ -44,7 +44,26 @@ These come from the project's goals. Do not break them without updating the desi
 
 ## Commands
 
-The app is not scaffolded yet. The scaffolding step (milestone M0) must fill this section with the exact commands for: install, dev run, lint, type check, unit tests, end-to-end tests, desktop build, Android build.
+Package manager is pnpm. Run everything from the repo root.
+
+| Task | Command |
+| --- | --- |
+| Install dependencies | `pnpm install` |
+| Run the app in development | `pnpm tauri dev` |
+| Type check (TypeScript + Svelte) | `pnpm check` |
+| Build desktop app and installers | `pnpm tauri build` |
+
+Lint, tests and Android build are added in later M0 steps (see [docs/roadmap.md](docs/roadmap.md)).
+
+## Layout
+
+| Path | Content |
+| --- | --- |
+| `src/` | Frontend: Svelte UI and, later, the TypeScript core |
+| `src-tauri/` | Native side: Rust crate, Tauri config, icons, capabilities |
+| `docs/` | Design document, roadmap, spike reports |
+
+The frontend is plain Svelte + Vite, not SvelteKit: the app has two screens and needs no router or server rendering.
 
 ## Workflow
 
