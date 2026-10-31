@@ -39,7 +39,7 @@ Each spike answers one yes/no question from the design doc. Results go to `docs/
 
 | # | Question | Notes |
 | --- | --- | --- |
-| S3 | Does the app run on a real Android phone and open a file picked with the system picker? | Biggest risk, done first. Needs `ANDROID_HOME`, the NDK and Rust Android targets |
+| S3 | Does the app run on a real Android phone and open a file picked with the system picker? | **Done: yes**, 102 ms from choice to page. See [spikes/s3.md](spikes/s3.md) |
 | S1 | Does Rust extract a page from a 100 MB CBZ and the webview show it in under 500 ms via the custom protocol? | Its archive and protocol code may be kept for M1 |
 | S2 | Does `createImageBitmap` with high-quality resize work on WebView2, WebKitGTK and Android? | Decides the rendering pipeline |
 | S4 | Which image formats does each webview decode? | Done together with S2 |

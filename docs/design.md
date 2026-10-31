@@ -65,7 +65,7 @@ Rejected alternatives: Electron + Capacitor (two projects, heavy apps), Python (
 
 Known stack risks, to verify in milestone M0.5 before building the rest:
 
-- Tauri 2 on mobile is less mature than on desktop; file access on Android goes through the Storage Access Framework (`content://` URIs, not normal paths).
+- Tauri 2 on mobile is less mature than on desktop; file access on Android goes through the Storage Access Framework (`content://` URIs, not normal paths). **Verified in [S3](spikes/s3.md):** Rust opens the picked URI as a seekable file through `tauri-plugin-fs` and reads single ZIP entries without loading the archive.
 - System webviews differ: WebView2 (Windows), WebKitGTK (Linux), WKWebView (macOS/iOS), Android System WebView. Image formats, gesture events and memory limits vary between them.
 - On Linux, WebKitGTK is the webview with the most known performance issues.
 
@@ -241,7 +241,7 @@ We start with the viewer, because that's where all the problems of existing read
 2. **M0.5 — Risk check.** Throwaway prototypes that answer yes/no questions before building the rest:
    - Does Rust read a page from a 100 MB CBZ and does the webview show it in under 500 ms?
    - Does `createImageBitmap` with high-quality resize work on WebView2, WebKitGTK and Android?
-   - Does the app run on a real Android phone and open a file chosen with the system picker?
+   - Does the app run on a real Android phone and open a file chosen with the system picker? **Yes** ([S3](spikes/s3.md))
    - Which image formats does each webview decode?
    - Does trackpad pinch arrive as a usable event on Windows and Linux?
 
