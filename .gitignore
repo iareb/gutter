@@ -7,6 +7,7 @@ build/
 .svelte-kit/
 *.tsbuildinfo
 .vite/
+vite.config.ts.timestamp-*
 
 # Rust / Tauri
 target/
