@@ -3,7 +3,11 @@
   --text: #8b8b93;
 
   color-scheme: dark;
-  font: 16px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
+  font:
+    16px/1.5 system-ui,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
