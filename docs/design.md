@@ -55,7 +55,7 @@ Why this split: a 100 MB CBZ must never be copied whole into JavaScript. Rust op
 | CBZ archives | Rust `zip` crate | Direct access to a single entry through the ZIP index, without reading the whole file |
 | CBR archives | Rust `unrar` crate (or libarchive via `compress-tools`) | Mature native library; avoids compiling to WASM. Final choice depends on licensing (see open questions) |
 | Delivering pages to the UI | Tauri custom protocol (e.g. `page://<volume>/<n>`) | The webview loads the page like a URL; no bytes serialized in IPC messages. Verified in the [`page-protocol` spike](spikes/page-protocol.md): at least as fast as IPC |
-| Image decoding | The webview's `createImageBitmap` | Native system decoding, off the main thread |
+| Image decoding | The webview's `createImageBitmap` | Native system decoding, off the main thread. Verified in the [`resize-quality` spike](spikes/resize-quality.md): high-quality resize works on Chromium only, so WebKit needs a canvas fallback |
 | PDF (post-MVP) | pdf.js | De facto standard for PDF in the browser |
 | Native side | Rust (Tauri commands) | Filesystem, archives, parallel thumbnail generation |
 | Persistence | SQLite via Tauri plugin | Library and reading positions |
@@ -108,14 +108,18 @@ A page travels this chain: Rust opens the archive and extracts only the requeste
 Every page is drawn from the original image, at the screen's physical resolution. Thumbnails exist only in the library.
 
 1. **Compute the target size.** On-screen size in CSS pixels × `devicePixelRatio` × zoom level.
-2. **Decode and resize together.** The page bytes become an `ImageBitmap` via `createImageBitmap(blob, { resizeWidth, resizeHeight, resizeQuality: 'high' })`: decoding and downscaling happen in one step, off the main thread. If a webview ignores the resize options (to verify in M0.5, especially WebKit), fall back to multi-step downscaling on a canvas with `imageSmoothingQuality: 'high'`. If the original is smaller than the target, show it without more blurry upscaling than necessary.
+2. **Decode and resize.** Two methods, chosen once at startup by a self-test:
+   - **One step** (Chromium: WebView2, Android): `createImageBitmap(blob, { resizeWidth, resizeHeight, resizeQuality: 'high' })` decodes and downscales in one call, off the main thread.
+   - **Canvas in steps** (WebKit): decode at full size, halve on a canvas until within 2× of the target, then a last `drawImage` with `imageSmoothingQuality: 'high'`.
+
+   The [`resize-quality` spike](spikes/resize-quality.md) showed that WebKitGTK honors the resize size but ignores `resizeQuality`, leaving moire, and that a single canvas `drawImage` is just as bad there. The self-test downscales a small generated pattern of 1 px stripes with the one-step method and measures the moire left (standard deviation of brightness); if it is not flat grey, the app uses canvas steps. The choice is logged. If the original is smaller than the target, show it without more blurry upscaling than necessary.
 3. **Keep the original.** The compressed page bytes stay in cache: on zoom, decode again at the new resolution; never upscale an already-reduced bitmap.
 4. **Draw.** On a `<canvas>` or `<img>` with exact dimensions, so the browser does not rescale again.
 5. **Re-render after zoom.** During the pinch, use a CSS transform (fast but approximate); once the gesture ends, redraw at the new resolution.
 
 For very large pages (scans over ~8000 px per side), high zoom uses tiled rendering: only the visible portion is decoded and drawn. An 8000 × 6000 page decoded in full takes about 190 MB, more than the entire mobile budget.
 
-Formats: JPEG, PNG and WebP are supported by all webviews. AVIF is not supported everywhere (on Windows it depends on the system AV1 extension): if the webview cannot decode it, the page is decoded in Rust (`image` crate) and served as PNG.
+Formats: JPEG (including progressive and CMYK), PNG and WebP decode correctly in all webviews. AVIF does not: it works on WebView2 and Android but not on Ubuntu's WebKitGTK ([`image-formats` spike](spikes/image-formats.md)). Support depends on how each webview is built, so it is detected at runtime, not assumed per platform: if the webview fails to decode a page, the page is decoded in Rust (`image` crate) and served as PNG. JPEG XL is not supported for now (WebView2 cannot decode it); the same fallback could cover it later.
 
 Rule: no image is ever recompressed to JPEG or cached at reduced quality for reading.
 
@@ -240,9 +244,9 @@ We start with the viewer, because that's where all the problems of existing read
 1. **M0 — Skeleton.** Repo, Tauri 2 + Svelte + TypeScript, CI with desktop build, README, `AGENTS.md` (with `CLAUDE.md` importing it), test file corpus.
 2. **M0.5 — Risk check.** Throwaway prototypes that answer yes/no questions before building the rest:
    - Does Rust read a page from a 100 MB CBZ and does the webview show it in under 500 ms? **Yes** ([`page-protocol`](spikes/page-protocol.md))
-   - Does `createImageBitmap` with high-quality resize work on WebView2, WebKitGTK and Android?
+   - Does `createImageBitmap` with high-quality resize work on WebView2, WebKitGTK and Android? **No, not on WebKitGTK**: canvas fallback chosen by a self-test ([`resize-quality`](spikes/resize-quality.md))
    - Does the app run on a real Android phone and open a file chosen with the system picker? **Yes** ([`android-files`](spikes/android-files.md))
-   - Which image formats does each webview decode?
+   - Which image formats does each webview decode? Common formats everywhere; **AVIF not on WebKitGTK**, so the Rust fallback is needed ([`image-formats`](spikes/image-formats.md))
    - Does trackpad pinch arrive as a usable event on Windows and Linux?
 
    Every "no" leads to fixing this document before M1.
