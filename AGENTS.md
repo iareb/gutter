@@ -72,6 +72,7 @@ Tooling: ESLint (flat config in `eslint.config.js`) and Prettier (`.prettierrc.j
 | `corpus/` | Test comics: `generated/` from `pnpm corpus`, `local/` for personal files; both ignored by git, see `corpus/README.md` |
 | `docs/` | Design document, roadmap, setup guide, spike reports |
 | `.github/workflows/ci.yml` | CI: `pnpm check`, `pnpm test` and a release build on Ubuntu and Windows |
+| `.github/ISSUE_TEMPLATE/` | Bug report form: steps to reproduce, expected and actual result, platform, version |
 
 The frontend is plain Svelte + Vite, not SvelteKit: the app has two screens and needs no router or server rendering.
 

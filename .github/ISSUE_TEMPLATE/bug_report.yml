@@ -1,0 +1,90 @@
+name: Bug report
+description: Something does not work as it should, e.g. a failed step of a milestone checklist
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One problem per report. The goal is that anyone can make the bug happen again by following the steps.
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered, starting from opening the app. Name the file you opened.
+      placeholder: |
+        1. Open `corpus/generated/odd-names.cbz`
+        2. Set reading direction to right to left
+        3. Tap the left side of the screen
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: What should have happened.
+      placeholder: The next page, page 2, is shown.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Screenshots or a short screen recording help a lot. Drag them into this box.
+      placeholder: Page 3 is shown; page 2 was skipped.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      multiple: true
+      options:
+        - Windows
+        - Linux
+        - macOS
+        - Android
+        - iOS
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device and input
+      description: Model or OS version, and how you were interacting.
+      placeholder: Motorola Edge 60, Android 16, touch
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: App version, or the commit you built from (`git log -1 --oneline`).
+      placeholder: 0.1.0 or 5e87b94
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often
+      options:
+        - Every time
+        - Sometimes
+        - Happened once
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Terminal output, browser console, or `adb logcat -s Tauri/Console` on Android. Optional.
+      render: text
+    validations:
+      required: false
