@@ -23,6 +23,10 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 
 Built with [Tauri 2](https://tauri.app), [Svelte 5](https://svelte.dev), TypeScript and Rust. See the [design document](docs/design.md) for the full plan.
 
+## Development
+
+See [docs/setup.md](docs/setup.md) to set up Windows, Linux or Android and run the app.
+
 ## License
 
 [MIT](LICENSE)

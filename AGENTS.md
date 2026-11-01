@@ -44,7 +44,7 @@ These come from the project's goals. Do not break them without updating the desi
 
 ## Commands
 
-Package manager is pnpm. Run everything from the repo root.
+Package manager is pnpm. Run everything from the repo root. Installing the toolchain (Rust, Node, WebKitGTK, Android SDK) is covered in [docs/setup.md](docs/setup.md).
 
 | Task | Command |
 | --- | --- |
@@ -61,7 +61,7 @@ Lint, tests and Android build are added in later M0 steps (see [docs/roadmap.md]
 | --- | --- |
 | `src/` | Frontend: Svelte UI and, later, the TypeScript core |
 | `src-tauri/` | Native side: Rust crate, Tauri config, icons, capabilities |
-| `docs/` | Design document, roadmap, spike reports |
+| `docs/` | Design document, roadmap, setup guide, spike reports |
 
 The frontend is plain Svelte + Vite, not SvelteKit: the app has two screens and needs no router or server rendering.
 
