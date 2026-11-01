@@ -1,6 +1,7 @@
-// Spike S1: serve CBZ pages to the webview through a custom protocol
-// (page://<volume>/<n>) and compare it with IPC.
-// Throwaway code, lives only on the spike/s1 branch.
+// Spikes resize-quality and image-formats: serve test images through the
+// page:// protocol so the UI can check what each webview decodes and how well
+// createImageBitmap downscales. Throwaway code, lives only on the
+// spike/resize-quality branch.
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -11,12 +12,11 @@ use std::time::Instant;
 
 use serde::Serialize;
 use tauri::http::{Response as HttpResponse, StatusCode, header};
-use tauri::ipc::Response;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
 use zip::ZipArchive;
 
-const IMAGE_EXTENSIONS: [&str; 5] = ["jpg", "jpeg", "png", "webp", "avif"];
+const IMAGE_EXTENSIONS: [&str; 8] = ["jpg", "jpeg", "png", "webp", "avif", "jxl", "gif", "bmp"];
 
 /// An open archive: only the ZIP index is in memory, pages are read on demand.
 struct Volume {
@@ -47,7 +47,8 @@ impl Volumes {
 struct VolumeInfo {
     id: u32,
     size_bytes: u64,
-    pages: usize,
+    /// Entry names in page order: the UI picks the test from the name.
+    names: Vec<String>,
     open_ms: f64,
     index_ms: f64,
 }
@@ -70,6 +71,9 @@ fn mime_type(name: &str) -> &'static str {
         "png" => "image/png",
         "webp" => "image/webp",
         "avif" => "image/avif",
+        "jxl" => "image/jxl",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
         _ => "application/octet-stream",
     }
 }
@@ -111,20 +115,12 @@ fn open_volume(app: AppHandle, volumes: State<Volumes>, path: FilePath) -> Resul
     let index_ms = t1.elapsed().as_secs_f64() * 1000.0;
 
     let id = volumes.next_id.fetch_add(1, Ordering::Relaxed);
-    let page_count = pages.len();
+    let names = pages.iter().map(|(name, _)| name.clone()).collect();
     let mut open = volumes.open.lock().unwrap();
     open.clear(); // spike: one volume at a time
     open.insert(id, Arc::new(Volume { archive: Mutex::new(archive), pages }));
 
-    Ok(VolumeInfo { id, size_bytes, pages: page_count, open_ms, index_ms })
-}
-
-/// IPC path, kept only to compare with the custom protocol.
-#[tauri::command]
-fn read_page(volumes: State<Volumes>, id: u32, page: usize) -> Result<Response, String> {
-    let volume = volumes.get(id)?;
-    let (bytes, _) = read_page_bytes(&volume, page)?;
-    Ok(Response::new(bytes))
+    Ok(VolumeInfo { id, size_bytes, names, open_ms, index_ms })
 }
 
 /// Serves `<scheme>://localhost/<volume>/<page>`.
@@ -165,7 +161,7 @@ pub fn run() {
             // Off the webview's thread: archive reads must never block the UI
             std::thread::spawn(move || responder.respond(serve_page(&app, &path)));
         })
-        .invoke_handler(tauri::generate_handler![open_volume, read_page])
+        .invoke_handler(tauri::generate_handler![open_volume])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
