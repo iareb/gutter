@@ -50,16 +50,22 @@ Package manager is pnpm. Run everything from the repo root. Installing the toolc
 | --- | --- |
 | Install dependencies | `pnpm install` |
 | Run the app in development | `pnpm tauri dev` |
-| Type check (TypeScript + Svelte) | `pnpm check` |
+| All checks: types, lint, formatting, clippy | `pnpm check` |
+| Only the web side / only Rust | `pnpm check:web` / `pnpm check:rust` |
+| Format everything (Prettier + rustfmt) | `pnpm format` |
+| All tests (Vitest + `cargo test`) | `pnpm test` |
+| Run the app on an Android phone | `pnpm tauri android dev` |
 | Build desktop app and installers | `pnpm tauri build` |
 
-Lint, tests and Android build are added in later M0 steps (see [docs/roadmap.md](docs/roadmap.md)).
+Run `pnpm format`, `pnpm check` and `pnpm test` before handing over a change: CI runs the same checks. Clippy runs with `-D warnings`, so any warning fails.
+
+Tooling: ESLint (flat config in `eslint.config.js`) and Prettier (`.prettierrc.json`: no semicolons, single quotes, 100 columns) for TypeScript and Svelte; rustfmt and clippy with defaults for Rust. Frontend tests are `*.test.ts` next to the code they test; Rust tests are `#[cfg(test)]` modules in the same file.
 
 ## Layout
 
 | Path | Content |
 | --- | --- |
-| `src/` | Frontend: Svelte UI and, later, the TypeScript core |
+| `src/` | Frontend: Svelte UI; `src/core/` holds the TypeScript core |
 | `src-tauri/` | Native side: Rust crate, Tauri config, icons, capabilities |
 | `docs/` | Design document, roadmap, setup guide, spike reports |
 

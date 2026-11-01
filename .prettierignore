@@ -1,0 +1,6 @@
+# Prettier also skips everything in .gitignore
+pnpm-lock.yaml
+# Rust and generated native projects: formatted by rustfmt or not ours
+src-tauri/
+# Docs keep their compact table style
+*.md
