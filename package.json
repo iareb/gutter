@@ -5,6 +5,7 @@
   "description": "A fast, open-source comic book reader that never degrades your pages",
   "license": "MIT",
   "type": "module",
+  "packageManager": "pnpm@11.12.0",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

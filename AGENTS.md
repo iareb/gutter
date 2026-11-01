@@ -68,6 +68,7 @@ Tooling: ESLint (flat config in `eslint.config.js`) and Prettier (`.prettierrc.j
 | `src/` | Frontend: Svelte UI; `src/core/` holds the TypeScript core |
 | `src-tauri/` | Native side: Rust crate, Tauri config, icons, capabilities |
 | `docs/` | Design document, roadmap, setup guide, spike reports |
+| `.github/workflows/ci.yml` | CI: `pnpm check`, `pnpm test` and a release build on Ubuntu and Windows |
 
 The frontend is plain Svelte + Vite, not SvelteKit: the app has two screens and needs no router or server rendering.
 
@@ -77,7 +78,7 @@ Single maintainer, no pull requests: work lands directly on `main`. The plan, st
 
 - **Never commit or push.** Make the change, then hand the maintainer a commit message, **what changes for the user** and **how to try it in under 5 minutes**. They commit and push.
 - Small steps, one feature each.
-- CI runs on every push to `main`: lint, type check, tests, build. A red CI is fixed before anything else.
+- CI runs on every push to `main`, on Ubuntu and Windows: `pnpm check`, `pnpm test`, then `pnpm tauri build --no-bundle`. A red CI is fixed before anything else.
 - The maintainer validates behavior, not code. Prefer evidence they can check without reading code: test results, benchmark numbers against the targets in the design doc, before/after screenshots.
 - A reported gesture bug becomes a recorded event sequence and a regression test.
 - When a decision in the design doc turns out wrong, update `docs/design.md` in the same change and explain why in plain language.
