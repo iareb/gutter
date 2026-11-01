@@ -146,4 +146,4 @@ adb logcat -s Tauri/Console
 
 ## Test files
 
-Copyrighted comics cannot go in the repo. Scripts that generate synthetic test volumes are coming in roadmap step 0.4; until then any CBZ works.
+Copyrighted comics cannot go in the repo. `pnpm corpus` generates synthetic test volumes in `corpus/generated/` (about 130 MB); [corpus/README.md](../corpus/README.md) explains each one and where to put real comics.

@@ -20,7 +20,7 @@ Spikes (M0.5) live on throwaway branches named `spike/<name>` that are never mer
 | 0.1 Scaffold | Tauri 2 + Svelte 5 + TypeScript + Vite with pnpm; an empty dark window | `pnpm tauri dev` opens the window |
 | 0.2 Tooling | ESLint, Prettier, `svelte-check`, Vitest, clippy, rustfmt; one sample test per side; commands documented in `AGENTS.md` | `pnpm check` and `pnpm test` pass |
 | 0.3 CI | GitHub Actions on every push: lint, type check, tests, build on Windows and Ubuntu | Green check next to the commit on GitHub |
-| 0.4 Test corpus | Script that generates synthetic test CBZs (see below), plus one or two public-domain comics; an ignored `corpus/local/` folder for personal files | The script produces the files and they open in any reader |
+| 0.4 Test corpus | `pnpm corpus` generates synthetic test CBZs (see below) in an ignored `corpus/generated/`; an ignored `corpus/local/` folder for personal files and public-domain comics, which are not committed | The script produces the files and they open in any reader |
 | 0.5 Issue templates | Bug report template with steps to reproduce, for milestone checklist failures | Opening a new issue on GitHub shows the template |
 
 The `android-files` spike runs right after step 0.1, because it is the biggest risk.

@@ -54,6 +54,7 @@ Package manager is pnpm. Run everything from the repo root. Installing the toolc
 | Only the web side / only Rust | `pnpm check:web` / `pnpm check:rust` |
 | Format everything (Prettier + rustfmt) | `pnpm format` |
 | All tests (Vitest + `cargo test`) | `pnpm test` |
+| Generate the test corpus in `corpus/generated/` | `pnpm corpus` |
 | Run the app on an Android phone | `pnpm tauri android dev` |
 | Build desktop app and installers | `pnpm tauri build` |
 
@@ -67,6 +68,8 @@ Tooling: ESLint (flat config in `eslint.config.js`) and Prettier (`.prettierrc.j
 | --- | --- |
 | `src/` | Frontend: Svelte UI; `src/core/` holds the TypeScript core |
 | `src-tauri/` | Native side: Rust crate, Tauri config, icons, capabilities |
+| `scripts/` | Development scripts in TypeScript, run directly by Node (`make-corpus.ts`) |
+| `corpus/` | Test comics: `generated/` from `pnpm corpus`, `local/` for personal files; both ignored by git, see `corpus/README.md` |
 | `docs/` | Design document, roadmap, setup guide, spike reports |
 | `.github/workflows/ci.yml` | CI: `pnpm check`, `pnpm test` and a release build on Ubuntu and Windows |
 

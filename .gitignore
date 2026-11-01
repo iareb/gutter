@@ -14,6 +14,8 @@ target/
 src-tauri/gen/schemas/
 
 # Tests and benchmarks
+corpus/generated/
+corpus/local/
 coverage/
 test-results/
 playwright-report/
