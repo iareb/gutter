@@ -1,10 +1,10 @@
-# Spike S1 — Serving pages through a custom protocol
+# Spike `page-protocol` — Serving pages through a custom protocol
 
 **Question:** does Rust extract a page from a 100 MB CBZ and the webview show it in under 500 ms via the custom protocol?
 
 **Answer: yes.** From choosing the file to the first page decoded: **52 ms on Windows, 211 ms on Android** (debug build). The custom protocol is at least as fast as IPC, so the design's choice stands.
 
-Date: 2026-10-31 · Code: branch `spike/s1` (not merged, built on `spike/s3`)
+Date: 2026-10-31 · Code: branch `spike/page-protocol` (not merged, built on `spike/android-files`)
 
 ## Setup
 
@@ -45,14 +45,14 @@ IPC vs custom protocol, same page, average of 3 runs:
 ## Findings
 
 - **The custom protocol is not slower than IPC**, slightly faster in transfer on both platforms. Decode works on identical bytes, so the Android decode gap (66 vs 91 ms) is measurement noise. Keep `page://`: it lets the webview load pages like any image and keeps page bytes out of the IPC channel.
-- **Archive size does not matter.** Reading the index of a 100 MB file takes 0.3 ms on Windows and 5 ms on Android. Opening a `content://` file costs more on Android (63 ms here, 14 ms in S3 for a 50 MB file): a one-off cost per volume, still well within budget.
+- **Archive size does not matter.** Reading the index of a 100 MB file takes 0.3 ms on Windows and 5 ms on Android. Opening a `content://` file costs more on Android (63 ms here, 14 ms in the `android-files` spike for a 50 MB file): a one-off cost per volume, still well within budget.
 - **On Android, page cost is split between transfer and decode** (~35 ms each). A page change that isn't preloaded takes ~70 ms, so the 16 ms target for page changes depends on preloading, as the design already assumes.
 - **An already decoded page swaps in within 1 ms.** Going back to the page just shown hit the webview's in-memory image cache despite `no-store`. This confirms that preloaded, decoded pages can be shown within one frame. It also means the webview keeps decoded images on its own: the memory budget in M3 has to account for it.
 
 ## Caveats
 
 - Debug builds on both platforms: release Rust will lower transfer times.
-- Decoding used `img.decode()` at full size, not `createImageBitmap` with resize. That is S2's job.
+- Decoding used `img.decode()` at full size, not `createImageBitmap` with resize. That is the `resize-quality` spike's job.
 - The archive sits behind a single `Mutex`, so pages are read one at a time. Fine for a viewer, but M3 preloading may want one file handle per worker.
 
 ## Decision

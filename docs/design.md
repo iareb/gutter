@@ -54,7 +54,7 @@ Why this split: a 100 MB CBZ must never be copied whole into JavaScript. Rust op
 | Frontend build | Vite | Standard for Svelte, fast hot reload |
 | CBZ archives | Rust `zip` crate | Direct access to a single entry through the ZIP index, without reading the whole file |
 | CBR archives | Rust `unrar` crate (or libarchive via `compress-tools`) | Mature native library; avoids compiling to WASM. Final choice depends on licensing (see open questions) |
-| Delivering pages to the UI | Tauri custom protocol (e.g. `page://<volume>/<n>`) | The webview loads the page like a URL; no bytes serialized in IPC messages. Verified in [S1](spikes/s1.md): at least as fast as IPC |
+| Delivering pages to the UI | Tauri custom protocol (e.g. `page://<volume>/<n>`) | The webview loads the page like a URL; no bytes serialized in IPC messages. Verified in the [`page-protocol` spike](spikes/page-protocol.md): at least as fast as IPC |
 | Image decoding | The webview's `createImageBitmap` | Native system decoding, off the main thread |
 | PDF (post-MVP) | pdf.js | De facto standard for PDF in the browser |
 | Native side | Rust (Tauri commands) | Filesystem, archives, parallel thumbnail generation |
@@ -65,7 +65,7 @@ Rejected alternatives: Electron + Capacitor (two projects, heavy apps), Python (
 
 Known stack risks, to verify in milestone M0.5 before building the rest:
 
-- Tauri 2 on mobile is less mature than on desktop; file access on Android goes through the Storage Access Framework (`content://` URIs, not normal paths). **Verified in [S3](spikes/s3.md):** Rust opens the picked URI as a seekable file through `tauri-plugin-fs` and reads single ZIP entries without loading the archive.
+- Tauri 2 on mobile is less mature than on desktop; file access on Android goes through the Storage Access Framework (`content://` URIs, not normal paths). **Verified in the [`android-files` spike](spikes/android-files.md):** Rust opens the picked URI as a seekable file through `tauri-plugin-fs` and reads single ZIP entries without loading the archive.
 - System webviews differ: WebView2 (Windows), WebKitGTK (Linux), WKWebView (macOS/iOS), Android System WebView. Image formats, gesture events and memory limits vary between them.
 - On Linux, WebKitGTK is the webview with the most known performance issues.
 
@@ -239,9 +239,9 @@ We start with the viewer, because that's where all the problems of existing read
 
 1. **M0 — Skeleton.** Repo, Tauri 2 + Svelte + TypeScript, CI with desktop build, README, `AGENTS.md` (with `CLAUDE.md` importing it), test file corpus.
 2. **M0.5 — Risk check.** Throwaway prototypes that answer yes/no questions before building the rest:
-   - Does Rust read a page from a 100 MB CBZ and does the webview show it in under 500 ms? **Yes** ([S1](spikes/s1.md))
+   - Does Rust read a page from a 100 MB CBZ and does the webview show it in under 500 ms? **Yes** ([`page-protocol`](spikes/page-protocol.md))
    - Does `createImageBitmap` with high-quality resize work on WebView2, WebKitGTK and Android?
-   - Does the app run on a real Android phone and open a file chosen with the system picker? **Yes** ([S3](spikes/s3.md))
+   - Does the app run on a real Android phone and open a file chosen with the system picker? **Yes** ([`android-files`](spikes/android-files.md))
    - Which image formats does each webview decode?
    - Does trackpad pinch arrive as a usable event on Windows and Linux?
 

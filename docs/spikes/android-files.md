@@ -1,10 +1,10 @@
-# Spike S3 — Android file access
+# Spike `android-files` — Android file access
 
 **Question:** does the app run on a real Android phone and open a file picked with the system picker?
 
 **Answer: yes.** Rust opens the `content://` URI returned by the picker as a seekable file and reads a single page from a CBZ without loading the archive. From picking the file to the page on screen: **102 ms**, in a debug build.
 
-Date: 2026-10-31 · Code: branch `spike/s3` (not merged)
+Date: 2026-10-31 · Code: branch `spike/android-files` (not merged)
 
 ## Setup
 
@@ -46,8 +46,8 @@ URI returned: `content://com.android.providers.downloads.documents/document/msf%
 
 - Debug build: release Rust will be faster. The numbers are an upper bound for this device.
 - 50 MB file, not the 100 MB of the design target. Opening and reading the index do not depend on file size, so we expect the same order of magnitude.
-- Pages travel via IPC (`ipc::Response`), not via the custom protocol the design calls for. That comparison is S1's job.
-- Decoding used `img.decode()`, not `createImageBitmap` with resize. That is S2's job.
+- Pages travel via IPC (`ipc::Response`), not via the custom protocol the design calls for. That comparison is the `page-protocol` spike's job.
+- Decoding used `img.decode()`, not `createImageBitmap` with resize. That is the `resize-quality` spike's job.
 
 ## Issues found along the way
 
