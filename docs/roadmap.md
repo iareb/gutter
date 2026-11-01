@@ -11,7 +11,7 @@ gutter has a single maintainer, so there are no pull requests: work lands direct
 3. The maintainer runs the checklist, commits and pushes.
 4. CI runs on every push to `main`. A red CI is fixed before anything else.
 
-Spikes (M0.5) live on throwaway local branches named `spike/<id>` that are never merged; only their write-up in `docs/spikes/` lands on `main`.
+Spikes (M0.5) live on throwaway branches named `spike/<name>` that are never merged; only their write-up in `docs/spikes/` lands on `main`.
 
 ## M0 — Skeleton
 
