@@ -43,7 +43,7 @@ Each spike answers one yes/no question from the design doc. Results go to `docs/
 | `page-protocol` | Does Rust extract a page from a 100 MB CBZ and the webview show it in under 500 ms via the custom protocol? | **Done: yes**, 52 ms on Windows, 211 ms on Android. Code on `spike/page-protocol` is a starting point for M1. See [spikes/page-protocol.md](spikes/page-protocol.md) |
 | `resize-quality` | Does `createImageBitmap` with high-quality resize work on WebView2, WebKitGTK and Android? | **Done: no on WebKitGTK**, which ignores `resizeQuality`. Canvas in steps works everywhere; a startup self-test picks the method. See [spikes/resize-quality.md](spikes/resize-quality.md) |
 | `image-formats` | Which image formats does each webview decode? | **Done**: common formats everywhere; AVIF fails on WebKitGTK, JPEG XL on WebView2. Rust fallback needed. See [spikes/image-formats.md](spikes/image-formats.md) |
-| `trackpad-pinch` | Does trackpad pinch arrive as a usable event on Windows and Linux? | Prepares M2. Waiting for a Linux laptop with a trackpad: under WSL the trackpad arrives as a mouse |
+| `trackpad-pinch` | Does trackpad pinch arrive as a usable event on Windows and Linux? | **Linux done: not in JavaScript**, WebKitGTK zooms the page itself; a GTK pinch handler in Rust works. Windows waiting for a laptop with a trackpad. See [spikes/trackpad-pinch.md](spikes/trackpad-pinch.md) |
 
 ## M1 onwards
 

@@ -143,7 +143,7 @@ The module is a state machine with four states: **idle**, **pan**, **pinch**, **
 
 Telling trackpad inertia apart from intentional scrolling is the most delicate part: browsers do not report it. We estimate it from the trend of `deltaY` values (steadily decreasing values = inertia) and from a lockout window after each page change. This is an empirical estimate: thresholds must be tuned on real devices, they cannot be worked out on paper.
 
-The gesture engine receives normalized events from a small per-platform adapter, because webviews do not produce them the same way. Example: trackpad pinch arrives as a wheel event with `ctrlKey` on Chromium (WebView2, Android), while on WebKit it may arrive as `gesturestart`/`gesturechange`. The state machine never sees these differences.
+The gesture engine receives normalized events from a small per-platform adapter, because webviews do not produce them the same way. Example: trackpad pinch arrives as a wheel event with `ctrlKey` on Chromium (WebView2, Android). WebKitGTK does not show it to the page at all: it zooms the whole page by itself and `preventDefault` cannot stop it ([`trackpad-pinch` spike](spikes/trackpad-pinch.md)). On Linux the adapter is therefore partly native: Rust catches the GTK touchpad pinch on the webview widget, stops it there and forwards begin / update / end with scale and center. The state machine never sees these differences.
 
 To make the engine testable without a device, any event sequence can be recorded to a file and replayed in automated tests: a reported gesture bug becomes a test that must never fail again.
 
@@ -247,7 +247,7 @@ We start with the viewer, because that's where all the problems of existing read
    - Does `createImageBitmap` with high-quality resize work on WebView2, WebKitGTK and Android? **No, not on WebKitGTK**: canvas fallback chosen by a self-test ([`resize-quality`](spikes/resize-quality.md))
    - Does the app run on a real Android phone and open a file chosen with the system picker? **Yes** ([`android-files`](spikes/android-files.md))
    - Which image formats does each webview decode? Common formats everywhere; **AVIF not on WebKitGTK**, so the Rust fallback is needed ([`image-formats`](spikes/image-formats.md))
-   - Does trackpad pinch arrive as a usable event on Windows and Linux?
+   - Does trackpad pinch arrive as a usable event on Windows and Linux? **Not in JavaScript on WebKitGTK**: on Linux a native GTK adapter catches it; Windows not tested yet ([`trackpad-pinch`](spikes/trackpad-pinch.md))
 
    Every "no" leads to fixing this document before M1.
 3. **M1 — Basic viewer.** Open CBZ, single page, high-quality rendering, keyboard and tap navigation.
