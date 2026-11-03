@@ -1,6 +1,6 @@
 <script lang="ts">
   import { open } from '@tauri-apps/plugin-dialog'
-  import { fileName, openVolume, type Volume } from './core/volume'
+  import { fileName, openVolume, pageUrl, type Volume } from './core/volume'
 
   let volume = $state<Volume>()
   let title = $state<string>()
@@ -35,11 +35,13 @@
   {#if error}
     <p class="error" role="alert">{error}</p>
   {:else if volume}
-    <ol>
-      {#each volume.pages as page, i (i)}
-        <li>{page}</li>
-      {/each}
-    </ol>
+    <!-- Plain fit to the screen for now: full-quality rendering is roadmap step 1.3 -->
+    <img
+      class="page"
+      src={pageUrl(volume, 0)}
+      alt="Page 1"
+      onerror={() => (error = 'Page 1 could not be shown.')}
+    />
   {:else}
     <p class="empty">gutter</p>
   {/if}
@@ -49,7 +51,12 @@
   main {
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
     height: 100%;
+    /* On Android the app draws under the status and navigation bars: keep out of them.
+       Zero on desktop. */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+      env(safe-area-inset-left);
   }
 
   header {
@@ -68,12 +75,10 @@
     border-radius: 6px;
   }
 
-  ol {
+  .page {
     flex: 1;
-    margin: 0;
-    padding: 0 16px 16px 48px;
-    overflow: auto;
-    user-select: text;
+    min-height: 0;
+    object-fit: contain;
   }
 
   .empty,

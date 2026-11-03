@@ -1,5 +1,18 @@
-import { describe, expect, it } from 'vitest'
-import { fileName } from './volume'
+import { describe, expect, it, vi } from 'vitest'
+import { fileName, pageUrl } from './volume'
+
+// Outside the app there is no Tauri runtime: mimic convertFileSrc on Windows and Android
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
+  convertFileSrc: (path: string, protocol: string) =>
+    `http://${protocol}.localhost/${encodeURIComponent(path)}`,
+}))
+
+describe('pageUrl', () => {
+  it('addresses a page of a volume through the page protocol', () => {
+    expect(pageUrl({ id: 3, pages: ['1.jpg', '2.jpg'] }, 1)).toBe('http://page.localhost/3/1')
+  })
+})
 
 describe('fileName', () => {
   it('takes the last part of a path on any system', () => {

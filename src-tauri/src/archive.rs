@@ -20,6 +20,20 @@ pub fn is_page(entry: &str) -> bool {
         .is_some_and(|(_, ext)| PAGE_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
 }
 
+/// MIME type of a page, from its extension.
+pub fn mime_type(entry: &str) -> &'static str {
+    let ext = entry
+        .rsplit_once('.')
+        .map(|(_, ext)| ext.to_ascii_lowercase());
+    match ext.as_deref() {
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("png") => "image/png",
+        Some("webp") => "image/webp",
+        Some("avif") => "image/avif",
+        _ => "application/octet-stream",
+    }
+}
+
 /// Compares entry names the way people number pages: runs of digits by value
 /// (`2` before `10`), the rest ignoring case. Exact byte order breaks ties.
 pub fn natural_cmp(a: &str, b: &str) -> Ordering {
@@ -83,7 +97,7 @@ mod tests {
     use zip::ZipArchive;
     use zip::write::{SimpleFileOptions, ZipWriter};
 
-    use super::{is_page, natural_cmp, pages};
+    use super::{is_page, mime_type, natural_cmp, pages};
 
     #[test]
     fn accepts_images_in_any_case_and_folder() {
@@ -100,6 +114,16 @@ mod tests {
         assert!(!is_page("jpg"));
         assert!(!is_page("__MACOSX/Chapter 1/001.jpg"));
         assert!(!is_page("Chapter 1/._001.jpg"));
+    }
+
+    #[test]
+    fn gives_mime_types_by_extension() {
+        assert_eq!(mime_type("001.JPG"), "image/jpeg");
+        assert_eq!(mime_type("a/b.jpeg"), "image/jpeg");
+        assert_eq!(mime_type("p.png"), "image/png");
+        assert_eq!(mime_type("p.webp"), "image/webp");
+        assert_eq!(mime_type("p.avif"), "image/avif");
+        assert_eq!(mime_type("ComicInfo.xml"), "application/octet-stream");
     }
 
     fn sorted(names: &[&str]) -> Vec<String> {
