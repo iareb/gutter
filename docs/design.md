@@ -55,7 +55,7 @@ Why this split: a 100 MB CBZ must never be copied whole into JavaScript. Rust op
 | CBZ archives | Rust `zip` crate | Direct access to a single entry through the ZIP index, without reading the whole file |
 | CBR archives | Rust `unrar` crate (or libarchive via `compress-tools`) | Mature native library; avoids compiling to WASM. Final choice depends on licensing (see open questions) |
 | Delivering pages to the UI | Tauri custom protocol (e.g. `page://<volume>/<n>`) | The webview loads the page like a URL; no bytes serialized in IPC messages. Verified in the [`page-protocol` spike](spikes/page-protocol.md): at least as fast as IPC |
-| Image decoding | The webview's `createImageBitmap` | Native system decoding, off the main thread. Verified in the [`resize-quality` spike](spikes/resize-quality.md): high-quality resize works on Chromium only, so WebKit needs a canvas fallback |
+| Image decoding | The webview's `createImageBitmap` | Native system decoding, off the main thread. Decode only: resizing happens on a canvas in steps, since neither WebKitGTK nor Chromium resizes without moire at every ratio (see the rendering pipeline) |
 | PDF (post-MVP) | pdf.js | De facto standard for PDF in the browser |
 | Native side | Rust (Tauri commands) | Filesystem, archives, parallel thumbnail generation |
 | Persistence | SQLite via Tauri plugin | Library and reading positions |
@@ -108,13 +108,11 @@ A page travels this chain: Rust opens the archive and extracts only the requeste
 Every page is drawn from the original image, at the screen's physical resolution. Thumbnails exist only in the library.
 
 1. **Compute the target size.** On-screen size in CSS pixels × `devicePixelRatio` × zoom level.
-2. **Decode and resize.** Two methods, chosen once at startup by a self-test:
-   - **One step** (Chromium: WebView2, Android): `createImageBitmap(blob, { resizeWidth, resizeHeight, resizeQuality: 'high' })` decodes and downscales in one call, off the main thread.
-   - **Canvas in steps** (WebKit): decode at full size, halve on a canvas until within 2× of the target, then a last `drawImage` with `imageSmoothingQuality: 'high'`.
+2. **Decode and resize.** The same method on every platform: `createImageBitmap(blob)` decodes at full size, then the page is downscaled on a canvas in steps with `imageSmoothingQuality: 'high'`. Halve while the result is still at least the target; if the target is not reached exactly, scale to twice the target and halve once more. Every path ends in an exact 2:1 step, which averages 2 × 2 pixels.
 
-   The [`resize-quality` spike](spikes/resize-quality.md) showed that WebKitGTK honors the resize size but ignores `resizeQuality`, leaving moire, and that a single canvas `drawImage` is just as bad there. The self-test downscales a small generated pattern of 1 px stripes with the one-step method and measures the moire left (standard deviation of brightness); if it is not flat grey, the app uses canvas steps. The choice is logged. If the original is smaller than the target, show it without more blurry upscaling than necessary.
+   Why not `createImageBitmap(blob, { resizeWidth, resizeHeight, resizeQuality: 'high' })`, which decodes and resizes in one call: the [`resize-quality` spike](spikes/resize-quality.md) showed that WebKitGTK ignores `resizeQuality`. M1 step 1.3 then found that Chromium is clean only at large ratios: with 1 px stripes it leaves strong moire between 1 and about 2.8 (25.7 at 1/2.2, the ratio of a 2400 px page on a 1080 px phone), while the spike had only tested 1/3.3. The stepped method is clean from a ratio of 2 up on both Chromium and WebKitGTK. Below 2 some moire remains on 1 px stripes, more on WebKitGTK than on Chromium (at 1/1.7: 31 vs 16); real pages are far less extreme, but this must be checked by eye on real comics. It costs about 25% more time than one-step resize on Android and briefly needs a canvas twice the target size per side. If that proves too slow or too heavy, the alternative is decoding and resizing in Rust (Lanczos). If the original is smaller than the target, show it without more blurry upscaling than necessary.
 3. **Keep the original.** The compressed page bytes stay in cache: on zoom, decode again at the new resolution; never upscale an already-reduced bitmap.
-4. **Draw.** On a `<canvas>` or `<img>` with exact dimensions, so the browser does not rescale again.
+4. **Draw.** On a `<canvas>` or `<img>` with exact dimensions, so the browser does not rescale again. Centering alone is not enough: with fractional pixel densities the element lands on fractional positions and the browser resamples it (1.6–3.5% of pixels changed at density 2.8125 and similar). The element is placed on whole physical pixels, its CSS size rounded up to the browser's 1/64 px unit, and drawn with `image-rendering: pixelated`, which is safe at 1:1.
 5. **Re-render after zoom.** During the pinch, use a CSS transform (fast but approximate); once the gesture ends, redraw at the new resolution.
 
 For very large pages (scans over ~8000 px per side), high zoom uses tiled rendering: only the visible portion is decoded and drawn. An 8000 × 6000 page decoded in full takes about 190 MB, more than the entire mobile budget.
@@ -244,7 +242,7 @@ We start with the viewer, because that's where all the problems of existing read
 1. **M0 — Skeleton.** Repo, Tauri 2 + Svelte + TypeScript, CI with desktop build, README, `AGENTS.md` (with `CLAUDE.md` importing it), test file corpus.
 2. **M0.5 — Risk check.** Throwaway prototypes that answer yes/no questions before building the rest:
    - Does Rust read a page from a 100 MB CBZ and does the webview show it in under 500 ms? **Yes** ([`page-protocol`](spikes/page-protocol.md))
-   - Does `createImageBitmap` with high-quality resize work on WebView2, WebKitGTK and Android? **No, not on WebKitGTK**: canvas fallback chosen by a self-test ([`resize-quality`](spikes/resize-quality.md))
+   - Does `createImageBitmap` with high-quality resize work on WebView2, WebKitGTK and Android? **No**: WebKitGTK ignores the quality, and Chromium leaves moire below a ratio of about 2.8; pages are downscaled on a canvas in steps everywhere ([`resize-quality`](spikes/resize-quality.md))
    - Does the app run on a real Android phone and open a file chosen with the system picker? **Yes** ([`android-files`](spikes/android-files.md))
    - Which image formats does each webview decode? Common formats everywhere; **AVIF not on WebKitGTK**, so the Rust fallback is needed ([`image-formats`](spikes/image-formats.md))
    - Does trackpad pinch arrive as a usable event on Windows and Linux? **Not in JavaScript on WebKitGTK**: on Linux a native GTK adapter catches it; Windows not tested yet ([`trackpad-pinch`](spikes/trackpad-pinch.md))

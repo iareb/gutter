@@ -1,6 +1,7 @@
 <script lang="ts">
   import { open } from '@tauri-apps/plugin-dialog'
-  import { fileName, openVolume, pageUrl, type Volume } from './core/volume'
+  import { fileName, openVolume, type Volume } from './core/volume'
+  import PageView from './PageView.svelte'
 
   let volume = $state<Volume>()
   let title = $state<string>()
@@ -35,13 +36,7 @@
   {#if error}
     <p class="error" role="alert">{error}</p>
   {:else if volume}
-    <!-- Plain fit to the screen for now: full-quality rendering is roadmap step 1.3 -->
-    <img
-      class="page"
-      src={pageUrl(volume, 0)}
-      alt="Page 1"
-      onerror={() => (error = 'Page 1 could not be shown.')}
-    />
+    <PageView {volume} page={0} onerror={(message) => (error = message)} />
   {:else}
     <p class="empty">gutter</p>
   {/if}
@@ -73,12 +68,6 @@
     background: #26262c;
     border: 1px solid #34343c;
     border-radius: 6px;
-  }
-
-  .page {
-    flex: 1;
-    min-height: 0;
-    object-fit: contain;
   }
 
   .empty,

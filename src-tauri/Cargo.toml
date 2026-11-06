@@ -24,6 +24,8 @@ serde_json = "1"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+# Reads width and height from image headers, without decoding
+imagesize = "0.15"
 
 # Full debug info made the Android dev APK ~300 MB, slow to install over Wi-Fi.
 # Keep file:line in backtraces for our code, drop the rest.

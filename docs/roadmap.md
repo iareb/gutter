@@ -41,7 +41,7 @@ Each spike answers one yes/no question from the design doc. Results go to `docs/
 | --- | --- | --- |
 | `android-files` | Does the app run on a real Android phone and open a file picked with the system picker? | **Done: yes**, 102 ms from choice to page. See [spikes/android-files.md](spikes/android-files.md) |
 | `page-protocol` | Does Rust extract a page from a 100 MB CBZ and the webview show it in under 500 ms via the custom protocol? | **Done: yes**, 52 ms on Windows, 211 ms on Android. Code on `spike/page-protocol` is a starting point for M1. See [spikes/page-protocol.md](spikes/page-protocol.md) |
-| `resize-quality` | Does `createImageBitmap` with high-quality resize work on WebView2, WebKitGTK and Android? | **Done: no on WebKitGTK**, which ignores `resizeQuality`. Canvas in steps works everywhere; a startup self-test picks the method. See [spikes/resize-quality.md](spikes/resize-quality.md) |
+| `resize-quality` | Does `createImageBitmap` with high-quality resize work on WebView2, WebKitGTK and Android? | **Done: no on WebKitGTK**, which ignores `resizeQuality`. Later found in step 1.3: Chromium too leaves moire below a ratio of about 2.8. Pages are downscaled on a canvas in steps everywhere. See [spikes/resize-quality.md](spikes/resize-quality.md) |
 | `image-formats` | Which image formats does each webview decode? | **Done**: common formats everywhere; AVIF fails on WebKitGTK, JPEG XL on WebView2. Rust fallback needed. See [spikes/image-formats.md](spikes/image-formats.md) |
 | `trackpad-pinch` | Does trackpad pinch arrive as a usable event on Windows and Linux? | **Linux done: not in JavaScript**, WebKitGTK zooms the page itself; a GTK pinch handler in Rust works. Windows waiting for a laptop with a trackpad. See [spikes/trackpad-pinch.md](spikes/trackpad-pinch.md) |
 
@@ -53,7 +53,7 @@ Built from the spike results: the spike code is a starting point, rewritten with
 | --- | --- | --- |
 | 1.1 Open a CBZ | Pick a file with the system picker (desktop and Android); Rust reads only the ZIP index and lists the pages in natural order (2 before 10), skipping non-image entries; clear errors for broken files | Open `odd-names.cbz`: pages listed 1 to 13 in order; `not-a-zip.cbz` and `no-pages.cbz` show an error, no crash |
 | 1.2 Page protocol | `page://` serves one page at a time on a separate thread, with Rust tests (from `page-protocol`) | Page 1 of `basic.cbz` shows up |
-| 1.3 Full-quality page | Decode and fit to the screen at physical resolution; a startup self-test picks `createImageBitmap` resize or canvas steps (from `resize-quality`) | `resize.cbz` shows flat grey stripes, no moire, on every platform |
+| 1.3 Full-quality page | Decode and fit to the screen at physical resolution; downscaled on a canvas in steps on every platform (from `resize-quality` and its update) | `resize.cbz` shows flat grey stripes, no moire, on every platform |
 | 1.4 Format fallback | If the webview cannot decode a page (AVIF on WebKitGTK), Rust decodes it and serves PNG (from `image-formats`) | Every page of `formats.cbz` shows on Linux |
 | 1.5 Navigation | Keyboard, click and tap on the sides | Read `basic.cbz` front to back with keys and taps |
 | 1.6 Benchmark | `<canvas>` vs `<img>`: quality and time on Windows, Linux and Android | Numbers in `docs/spikes/canvas-vs-img.md` |

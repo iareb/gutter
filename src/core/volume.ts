@@ -1,4 +1,5 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import type { Size } from './fit'
 
 export type Volume = {
   id: number
@@ -18,6 +19,22 @@ export function openVolume(path: string): Promise<Volume> {
  */
 export function pageUrl(volume: Volume, n: number): string {
   return `${convertFileSrc(String(volume.id), 'page')}/${n}`
+}
+
+export type PageData = {
+  bytes: Blob
+  /** From the image header; missing for formats Rust cannot measure. */
+  size?: Size
+}
+
+/** Fetches the encoded bytes of a page. Rejects with the message Rust sent. */
+export async function loadPage(volume: Volume, n: number): Promise<PageData> {
+  const response = await fetch(pageUrl(volume, n))
+  if (!response.ok) throw new Error(await response.text())
+  const width = Number(response.headers.get('x-page-width'))
+  const height = Number(response.headers.get('x-page-height'))
+  const bytes = await response.blob()
+  return width && height ? { bytes, size: { width, height } } : { bytes }
 }
 
 /**

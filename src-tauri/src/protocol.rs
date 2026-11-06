@@ -27,10 +27,24 @@ pub fn respond(volumes: &Volumes, path: &str) -> Response<Vec<u8>> {
         );
     };
     match volume.read_page(n) {
-        Ok((bytes, mime)) => response(StatusCode::OK, mime).body(bytes).unwrap(),
+        Ok((bytes, mime)) => {
+            let mut builder = response(StatusCode::OK, mime);
+            // The UI needs the size to pick the decode size before decoding.
+            // Unknown formats get no headers and are measured by decoding.
+            if let Ok(size) = imagesize::blob_size(&bytes) {
+                builder = builder
+                    .header(WIDTH, size.width)
+                    .header(HEIGHT, size.height);
+            }
+            builder.body(bytes).unwrap()
+        }
         Err(message) => error(StatusCode::NOT_FOUND, message),
     }
 }
+
+/// Page size in pixels, read from the image header.
+pub const WIDTH: &str = "x-page-width";
+pub const HEIGHT: &str = "x-page-height";
 
 fn response(status: StatusCode, mime: &str) -> tauri::http::response::Builder {
     Response::builder()
@@ -41,6 +55,11 @@ fn response(status: StatusCode, mime: &str) -> tauri::http::response::Builder {
         // The page origin differs from the app's: without this, fetch() fails and
         // a canvas that drew the page could not be read back
         .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+        // Cross-origin, custom headers stay hidden from fetch() unless listed
+        .header(
+            header::ACCESS_CONTROL_EXPOSE_HEADERS,
+            format!("{WIDTH}, {HEIGHT}"),
+        )
 }
 
 fn error(status: StatusCode, message: String) -> Response<Vec<u8>> {
@@ -56,16 +75,22 @@ mod tests {
     use tauri::http::{StatusCode, header};
     use zip::write::{SimpleFileOptions, ZipWriter};
 
-    use super::{parse, respond};
+    use super::{HEIGHT, WIDTH, parse, respond};
     use crate::volume::{Volume, Volumes};
 
+    /// A volume whose entries hold their own name as content.
     fn volume(names: &[&str]) -> Volume {
+        let entries: Vec<_> = names.iter().map(|n| (*n, n.as_bytes())).collect();
+        volume_with(&entries)
+    }
+
+    fn volume_with(entries: &[(&str, &[u8])]) -> Volume {
         let mut writer = ZipWriter::new(std::io::Cursor::new(Vec::new()));
-        for name in names {
+        for (name, content) in entries {
             writer
                 .start_file(*name, SimpleFileOptions::default())
                 .unwrap();
-            writer.write_all(name.as_bytes()).unwrap();
+            writer.write_all(content).unwrap();
         }
         let mut file = tempfile::tempfile().unwrap();
         file.write_all(&writer.finish().unwrap().into_inner())
@@ -93,6 +118,20 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()[header::CONTENT_TYPE], "image/png");
         assert_eq!(response.body(), b"2.png");
+        // Not a real image: no size
+        assert!(response.headers().get(WIDTH).is_none());
+    }
+
+    #[test]
+    fn tells_the_page_size_from_its_header() {
+        // Just the start of a PNG: signature and IHDR chunk with 3 x 5 pixels
+        let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+        png.extend_from_slice(&[0, 0, 0, 3, 0, 0, 0, 5, 8, 6, 0, 0, 0]);
+        let volumes = Volumes::default();
+        let id = volumes.insert(volume_with(&[("1.png", &png)]));
+        let response = respond(&volumes, &format!("/{id}/0"));
+        assert_eq!(response.headers()[WIDTH], "3");
+        assert_eq!(response.headers()[HEIGHT], "5");
     }
 
     #[test]

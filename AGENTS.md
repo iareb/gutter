@@ -17,7 +17,7 @@ Not in scope for 0.1: online store or downloads, cloud sync, editing files, DRM.
 | Native side | Rust (Tauri commands): filesystem, archives, thumbnails, database |
 | Archives | `zip` crate for CBZ; `unrar` or libarchive for CBR (undecided) |
 | Page delivery | Tauri custom protocol, e.g. `page://<volume>/<n>` |
-| Image decoding | `createImageBitmap` in the webview; Rust `image` crate as fallback |
+| Image decoding | `createImageBitmap` in the webview, then downscaling on a canvas in steps; Rust `image` crate as fallback |
 | Persistence | SQLite via Tauri plugin |
 | Tests | Vitest (unit), Playwright (end-to-end) |
 

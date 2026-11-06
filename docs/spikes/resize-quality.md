@@ -61,3 +61,21 @@ Every method returned exactly 727 × 1091: no webview ignores the resize size, o
 ## Decision
 
 The design changes. Step 2 of the rendering pipeline no longer assumes that `resizeQuality: 'high'` works: at startup the app runs a quick self-test that downscales a generated stripe pattern with `createImageBitmap` and measures the moire left. If the result is clean it decodes and resizes in one call (Chromium); otherwise it decodes at full size and halves on a canvas (WebKit). The choice is made once per run and logged.
+
+## Update (M1 step 1.3)
+
+The self-test above was built and failed on the first real page: on the Android phone a 2400 px page fitted to a 1080 px screen showed strong moire, while the self-test reported 0.0. The spike, and the self-test after it, only measured a ratio of 1/3.3. Measured again in Chromium 152 at many ratios, with the same 1 px stripes (standard deviation, lower is better):
+
+| Ratio | `createImageBitmap` `high` | Canvas: halve, then one last step | Canvas: halve, then 2× target and halve | Area average (reference) |
+| --- | --- | --- | --- | --- |
+| 1.3 | 73.7 | 73.5 | 36.1 | 50.6 |
+| 1.7 | 54.2 | 52.2 | 16.2 | 20.4 |
+| 1.9 | 42.3 | 40.3 | 5.4 | 6.7 |
+| 2.2 | 25.7 | 0.0 | 0.0 | 11.7 |
+| 2.5 | 11.0 | 0.0 | 0.0 | 25.5 |
+| 2.8 | 1.2 | 0.0 | 0.0 | 25.8 |
+| 3.3 | 0.0 | 0.0 | 0.0 | 19.9 |
+
+Chromium's `high` is clean only from about 2.8 up. Ending every downscale with an exact 2:1 step (scale to twice the target, then halve) is clean from a ratio of 2 up, on both engines. Below 2 it depends on the engine. In the real app, standard deviation on WebKitGTK 2.52 vs Chromium: 63.3 vs 36.1 at 1.3, 30.6 vs 16.2 at 1.7, 10.4 vs 5.4 at 1.9. On WebKitGTK that is worse than an area average below about 1.8.
+
+**New decision:** no self-test. Every platform decodes at full size and downscales on a canvas, halving and ending with an exact 2:1 step. See the rendering pipeline in the design doc.
