@@ -70,7 +70,7 @@ Tooling: ESLint (flat config in `eslint.config.js`) and Prettier (`.prettierrc.j
 | `src-tauri/` | Native side: Rust crate, Tauri config, icons, capabilities |
 | `scripts/` | Development scripts in TypeScript, run directly by Node (`make-corpus.ts`) |
 | `corpus/` | Test comics: `generated/` from `pnpm corpus`, `local/` for personal files; both ignored by git, see `corpus/README.md` |
-| `docs/` | Design document, roadmap, setup guide, spike reports |
+| `docs/` | Design document, roadmap, setup guide, spike reports, milestone checklists (`docs/checklists/`) |
 | `.github/workflows/ci.yml` | CI: `pnpm check`, `pnpm test` and a release build on Ubuntu and Windows |
 | `.github/ISSUE_TEMPLATE/` | Bug report form: steps to reproduce, expected and actual result, platform, version |
 

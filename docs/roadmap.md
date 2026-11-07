@@ -57,6 +57,7 @@ Built from the spike results: the spike code is a starting point, rewritten with
 | 1.4 Format fallback | If the webview cannot decode a page (AVIF on WebKitGTK), the UI asks Rust for it as PNG (from `image-formats`); pages Rust cannot decode either show a clear error | Every page of `formats.cbz` shows on Linux |
 | 1.5 Navigation | Keyboard, click and tap on the sides | Read `basic.cbz` front to back with keys and taps |
 | 1.6 Benchmark | `<canvas>` vs `<img>`: quality and time on Windows, Linux and Android | **Done:** `<canvas>` 2D. See [spikes/canvas-vs-img.md](spikes/canvas-vs-img.md) |
+| 1.7 Milestone checklist | 15 concrete actions on the built app, on Windows, Linux and Android; each failure becomes an issue | Every cell of [checklists/m1.md](checklists/m1.md) is ok |
 
 ## M2 onwards
 
