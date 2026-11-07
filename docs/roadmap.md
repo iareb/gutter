@@ -56,7 +56,7 @@ Built from the spike results: the spike code is a starting point, rewritten with
 | 1.3 Full-quality page | Decode and fit to the screen at physical resolution; downscaled on a canvas in steps on every platform (from `resize-quality` and its update) | `resize.cbz` shows flat grey stripes, no moire, on every platform |
 | 1.4 Format fallback | If the webview cannot decode a page (AVIF on WebKitGTK), the UI asks Rust for it as PNG (from `image-formats`); pages Rust cannot decode either show a clear error | Every page of `formats.cbz` shows on Linux |
 | 1.5 Navigation | Keyboard, click and tap on the sides | Read `basic.cbz` front to back with keys and taps |
-| 1.6 Benchmark | `<canvas>` vs `<img>`: quality and time on Windows, Linux and Android | Numbers in `docs/spikes/canvas-vs-img.md` |
+| 1.6 Benchmark | `<canvas>` vs `<img>`: quality and time on Windows, Linux and Android | **Done:** `<canvas>` 2D. See [spikes/canvas-vs-img.md](spikes/canvas-vs-img.md) |
 
 ## M2 onwards
 

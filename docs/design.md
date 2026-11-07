@@ -112,7 +112,7 @@ Every page is drawn from the original image, at the screen's physical resolution
 
    Why not `createImageBitmap(blob, { resizeWidth, resizeHeight, resizeQuality: 'high' })`, which decodes and resizes in one call: the [`resize-quality` spike](spikes/resize-quality.md) showed that WebKitGTK ignores `resizeQuality`. M1 step 1.3 then found that Chromium is clean only at large ratios: with 1 px stripes it leaves strong moire between 1 and about 2.8 (25.7 at 1/2.2, the ratio of a 2400 px page on a 1080 px phone), while the spike had only tested 1/3.3. The stepped method is clean from a ratio of 2 up on both Chromium and WebKitGTK. Below 2 some moire remains on 1 px stripes, more on WebKitGTK than on Chromium (at 1/1.7: 31 vs 16); real pages are far less extreme, but this must be checked by eye on real comics. It costs about 25% more time than one-step resize on Android and briefly needs a canvas twice the target size per side. If that proves too slow or too heavy, the alternative is decoding and resizing in Rust (Lanczos). If the original is smaller than the target, show it without more blurry upscaling than necessary.
 3. **Keep the original.** The compressed page bytes stay in cache: on zoom, decode again at the new resolution; never upscale an already-reduced bitmap.
-4. **Draw.** On a `<canvas>` or `<img>` with exact dimensions, so the browser does not rescale again. Centering alone is not enough: with fractional pixel densities the element lands on fractional positions and the browser resamples it (1.6–3.5% of pixels changed at density 2.8125 and similar). The element is placed on whole physical pixels, its CSS size rounded up to the browser's 1/64 px unit, and drawn with `image-rendering: pixelated`, which is safe at 1:1.
+4. **Draw.** On a `<canvas>` with a 2D context ([`canvas-vs-img` benchmark](spikes/canvas-vs-img.md)), with exact dimensions, so the browser does not rescale again. Centering alone is not enough: with fractional pixel densities the element lands on fractional positions and the browser resamples it (1.6–3.5% of pixels changed at density 2.8125 and similar). The element is placed on whole physical pixels, its CSS size rounded up to the browser's 1/64 px unit, and drawn with `image-rendering: pixelated`, which is safe at 1:1.
 5. **Re-render after zoom.** During the pinch, use a CSS transform (fast but approximate); once the gesture ends, redraw at the new resolution.
 
 For very large pages (scans over ~8000 px per side), high zoom uses tiled rendering: only the visible portion is decoded and drawn. An 8000 × 6000 page decoded in full takes about 190 MB, more than the entire mobile budget.
@@ -273,7 +273,7 @@ Open questions:
 
 - [x] Project name: **gutter**
 - [x] License: **MIT**
-- [ ] Rendering on `<canvas>` or `<img>`: decide with a benchmark in M1
+- [x] Rendering on `<canvas>` or `<img>`: **`<canvas>` with a 2D context** ([`canvas-vs-img` benchmark](spikes/canvas-vs-img.md)): an `<img>` either lets the browser downscale, leaving moire, or needs the page re-encoded as PNG, up to 25 times slower
 - [ ] CBR: `unrar` crate or libarchive. With MIT, GPL compatibility is no longer a concern, but the UnRAR license is not an open-source license: F-Droid treats apps bundling it as non-free. libarchive (BSD) avoids this but is harder to build for Android
 - [ ] Default memory budget on mobile: set from the M0.5 and M3 measurements
 - [ ] Apple Developer account for iOS: yes or no
