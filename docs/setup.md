@@ -109,15 +109,27 @@ The Android project is already generated and committed in `src-tauri/gen/android
 
 1. On the phone: *Settings → About phone*, tap *Build number* 7 times to unlock *Developer options*.
 2. **Over USB:** enable *USB debugging*, plug the phone in and accept the prompt on the phone. If no prompt appears, try another cable or port: some USB-C cables only charge.
-3. **Over Wi-Fi** (phone and PC on the same network): enable *Wireless debugging*, open it and choose *Pair device with pairing code*, then on the PC:
+3. **Over Wi-Fi** (phone and PC on the same network): enable *Wireless debugging*, open it and choose *Pair device with pairing code*, then on the PC, once per PC:
 
    ```sh
    adb pair <ip>:<pairing port>      # asks for the 6-digit code
-   adb connect <ip>:<port>           # the port shown on the main Wireless debugging screen
    ```
 
-   Pairing is done once. The connection port changes every time wireless debugging is turned on, and the phone turns it off after a reboot or a network change. A paired phone often reconnects on its own when wireless debugging is turned back on.
-4. `adb devices` must list the phone as `device`.
+   After that, a paired phone connects by itself: adb finds it on the network (mDNS) when wireless debugging is on. Each time:
+
+   ```sh
+   adb start-server
+   adb devices                       # after a few seconds
+   ```
+
+   The phone shows up as `adb-<serial>-<id>._adb-tls-connect._tcp`. Only if it does not appear within about ten seconds (some networks block mDNS), connect by hand with the IP address and port shown on the main *Wireless debugging* screen:
+
+   ```sh
+   adb connect <ip>:<port>
+   ```
+
+   The port changes every time wireless debugging is turned on, and the phone turns it off after a reboot or a network change.
+4. `adb devices` must list the phone as `device`, **once**. If it appears twice (the mDNS name and `<ip>:<port>`), it is the same phone reached both ways: commands then fail with "more than one device". Drop the manual one with `adb disconnect <ip>:<port>`.
 
 ### Running
 
@@ -125,11 +137,10 @@ The Android project is already generated and committed in `src-tauri/gen/android
 pnpm tauri android dev
 ```
 
-This builds the app, installs it on the phone and loads the UI from the dev server on the PC, so edits show up live. Things that look like bugs but are not:
+This builds the app, installs it on the phone and loads the UI from the dev server on the PC. Code changes do not reach the phone live: restart the command to see them. The live connection is turned off on mobile, because when the system file picker sent the app to the background the connection dropped and Vite reloaded the page, losing the open comic. Things that look like bugs but are not:
 
 - **The app closes after a second when opened without the PC.** A dev build has no UI of its own; it needs `pnpm tauri android dev` running.
 - **No icon on the home screen.** Apps installed through adb are not added automatically; find gutter in the app drawer.
-- **The page reloads after picking a file.** While the system picker is open the app is in the background, the dev server connection drops and Vite reloads the page when it reconnects. Development only.
 - **The first install over Wi-Fi is slow.** The dev APK is about 150 MB.
 
 To copy a test file to the phone:
@@ -143,6 +154,8 @@ Logs from the app (`console.log` in the UI shows up as `Tauri/Console`):
 ```sh
 adb logcat -s Tauri/Console
 ```
+
+The webview of a dev build can also be inspected from the PC: open `chrome://inspect` in Chrome or Edge with the phone connected, and gutter is listed under the phone.
 
 ## Test files
 
