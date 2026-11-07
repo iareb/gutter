@@ -3,6 +3,8 @@ use tauri::Manager;
 pub mod archive;
 pub mod convert;
 pub mod protocol;
+#[cfg(debug_assertions)]
+pub mod recording;
 pub mod volume;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -20,7 +22,18 @@ pub fn run() {
                 responder.respond(protocol::respond(&volumes, &path));
             });
         })
-        .invoke_handler(tauri::generate_handler![volume::open_volume])
+        .invoke_handler(handler())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+// The input recorder exists only in debug builds
+#[cfg(debug_assertions)]
+fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool {
+    tauri::generate_handler![volume::open_volume, recording::save_recording]
+}
+
+#[cfg(not(debug_assertions))]
+fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool {
+    tauri::generate_handler![volume::open_volume]
 }

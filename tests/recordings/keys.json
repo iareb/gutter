@@ -1,0 +1,116 @@
+{
+  "description": "Keyboard on WebView2, interpreted as on a fitted page: ArrowRight, + twice, ArrowDown six times, 0.",
+  "recording": {
+    "version": 1,
+    "device": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
+    "area": {
+      "width": 1000,
+      "height": 738,
+      "dpr": 1
+    },
+    "events": [
+      {
+        "kind": "key",
+        "t": 0,
+        "key": "ArrowRight",
+        "shift": false
+      },
+      {
+        "kind": "key",
+        "t": 215,
+        "key": "+",
+        "shift": false
+      },
+      {
+        "kind": "key",
+        "t": 432,
+        "key": "+",
+        "shift": false
+      },
+      {
+        "kind": "key",
+        "t": 650,
+        "key": "ArrowDown",
+        "shift": false
+      },
+      {
+        "kind": "key",
+        "t": 868,
+        "key": "ArrowDown",
+        "shift": false
+      },
+      {
+        "kind": "key",
+        "t": 1086,
+        "key": "ArrowDown",
+        "shift": false
+      },
+      {
+        "kind": "key",
+        "t": 1299,
+        "key": "ArrowDown",
+        "shift": false
+      },
+      {
+        "kind": "key",
+        "t": 1515,
+        "key": "ArrowDown",
+        "shift": false
+      },
+      {
+        "kind": "key",
+        "t": 1722,
+        "key": "ArrowDown",
+        "shift": false
+      },
+      {
+        "kind": "key",
+        "t": 1926,
+        "key": "0",
+        "shift": false
+      }
+    ]
+  },
+  "expected": [
+    {
+      "kind": "move",
+      "move": "next"
+    },
+    {
+      "kind": "zoom",
+      "how": "in"
+    },
+    {
+      "kind": "zoom",
+      "how": "in"
+    },
+    {
+      "kind": "move",
+      "move": "next"
+    },
+    {
+      "kind": "move",
+      "move": "next"
+    },
+    {
+      "kind": "move",
+      "move": "next"
+    },
+    {
+      "kind": "move",
+      "move": "next"
+    },
+    {
+      "kind": "move",
+      "move": "next"
+    },
+    {
+      "kind": "move",
+      "move": "next"
+    },
+    {
+      "kind": "zoom",
+      "how": "fit"
+    }
+  ]
+}

@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { invoke } from '@tauri-apps/api/core'
   import { open } from '@tauri-apps/plugin-dialog'
-  import { keyMove, movePage, type Move } from './core/navigation'
+  import { fromKey, type InputEvent, type Recording } from './core/input'
+  import { Interpreter, type Action } from './core/interpret'
+  import { movePage, type Move } from './core/navigation'
   import { fileName, openVolume, type Volume } from './core/volume'
   import PageView from './PageView.svelte'
 
@@ -10,6 +13,13 @@
   let busy = $state(false)
   /** Current page, counted from 0. */
   let page = $state(0)
+  let viewer = $state<PageView>()
+
+  // All input goes through the interpreter as normalized events
+  const interpreter = new Interpreter({
+    width: () => viewer?.area().width ?? 0,
+    zoomed: () => viewer?.zoomed() ?? false,
+  })
 
   async function pick() {
     const path = await open({ multiple: false, directory: false })
@@ -25,21 +35,73 @@
       error = String(e)
     } finally {
       busy = false
-      // Otherwise Space and Enter would press the button again instead of turning pages
-      ;(document.activeElement as HTMLElement | null)?.blur()
+      blur()
     }
   }
+
+  // Otherwise Space and Enter would press the button again instead of turning pages
+  const blur = () => (document.activeElement as HTMLElement | null)?.blur()
 
   function go(move: Move) {
     if (volume) page = movePage(move, page, volume.pages.length)
   }
 
+  function apply(action: Action) {
+    switch (action.kind) {
+      case 'move':
+        return go(action.move)
+      case 'pan':
+        // A zoomed page moves first; at its edge the same key turns the page
+        if (!viewer?.pan(action.fx, action.fy) && action.orMove) go(action.orMove)
+        return
+      case 'zoom':
+        return viewer?.zoomBy(action.how)
+    }
+  }
+
+  /** Feeds one event to the interpreter. Returns whether it did something. */
+  function input(event: InputEvent) {
+    recorded?.push(event)
+    const actions = interpreter.feed(event)
+    actions.forEach(apply)
+    return actions.length > 0
+  }
+
   function onkeydown(event: KeyboardEvent) {
     if (!volume || event.ctrlKey || event.altKey || event.metaKey) return
-    const move = keyMove(event.key, event.shiftKey)
-    if (!move) return
-    event.preventDefault()
-    go(move)
+    if (input(fromKey(event, 0))) event.preventDefault()
+  }
+
+  // Development builds only: record gestures to a file, to replay them in tests
+  // (tests/recordings). Release builds have no button and no command behind it.
+  const DEV = import.meta.env.DEV
+  let recorded = $state.raw<InputEvent[] | null>(null)
+  let recordStatus = $state<string>()
+
+  async function toggleRecording() {
+    blur()
+    if (!recorded) {
+      recorded = []
+      recordStatus = 'Recording…'
+      return
+    }
+    const events = recorded
+    recorded = null
+    const t0 = events[0]?.t ?? 0
+    const area = viewer?.area() ?? { width: innerWidth, height: innerHeight }
+    const recording: Recording = {
+      version: 1,
+      device: navigator.userAgent,
+      area: { width: area.width, height: area.height, dpr: devicePixelRatio },
+      events: events.map((e) => ({ ...e, t: e.t - t0 })),
+    }
+    try {
+      const path = await invoke<string>('save_recording', { json: JSON.stringify(recording) })
+      recordStatus = `${events.length} events saved to ${path}`
+      console.info(`[gutter] recording saved: ${path}`)
+    } catch (e) {
+      recordStatus = `Not saved: ${e}`
+    }
   }
 </script>
 
@@ -51,12 +113,16 @@
     {#if volume}
       <span>{title ?? 'Comic'} · {page + 1} / {volume.pages.length}</span>
     {/if}
+    {#if DEV}
+      <button class="record" onclick={toggleRecording}>{recorded ? '■ Stop' : '● Rec'}</button>
+      {#if recordStatus}<small>{recordStatus}</small>{/if}
+    {/if}
   </header>
 
   {#if error}
     <p class="error" role="alert">{error}</p>
   {:else if volume}
-    <PageView {volume} {page} onmove={go} />
+    <PageView bind:this={viewer} {volume} {page} oninput={input} />
   {:else}
     <p class="empty">gutter</p>
   {/if}
@@ -88,6 +154,17 @@
     background: #26262c;
     border: 1px solid #34343c;
     border-radius: 6px;
+  }
+
+  .record {
+    margin-left: auto;
+  }
+
+  small {
+    overflow: hidden;
+    opacity: 0.7;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .empty,

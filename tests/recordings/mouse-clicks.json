@@ -1,0 +1,208 @@
+{
+  "description": "Mouse on WebView2: click right, right, left, middle; a drag from right to center; a 700 ms press on the right. Only the three quick clicks on the sides turn pages.",
+  "recording": {
+    "version": 1,
+    "device": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
+    "area": {
+      "width": 1000,
+      "height": 738,
+      "dpr": 1
+    },
+    "events": [
+      {
+        "kind": "pointer",
+        "t": 0,
+        "phase": "down",
+        "id": 1,
+        "device": "mouse",
+        "x": 900,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 72,
+        "phase": "up",
+        "id": 1,
+        "device": "mouse",
+        "x": 900,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 297,
+        "phase": "down",
+        "id": 1,
+        "device": "mouse",
+        "x": 900,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 371,
+        "phase": "up",
+        "id": 1,
+        "device": "mouse",
+        "x": 900,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 594,
+        "phase": "down",
+        "id": 1,
+        "device": "mouse",
+        "x": 100,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 667,
+        "phase": "up",
+        "id": 1,
+        "device": "mouse",
+        "x": 100,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 878,
+        "phase": "down",
+        "id": 1,
+        "device": "mouse",
+        "x": 500,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 940,
+        "phase": "up",
+        "id": 1,
+        "device": "mouse",
+        "x": 500,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1156,
+        "phase": "down",
+        "id": 1,
+        "device": "mouse",
+        "x": 900,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1161,
+        "phase": "move",
+        "id": 1,
+        "device": "mouse",
+        "x": 862.5,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1194,
+        "phase": "move",
+        "id": 1,
+        "device": "mouse",
+        "x": 825,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1226,
+        "phase": "move",
+        "id": 1,
+        "device": "mouse",
+        "x": 787.5,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1256,
+        "phase": "move",
+        "id": 1,
+        "device": "mouse",
+        "x": 750,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1287,
+        "phase": "move",
+        "id": 1,
+        "device": "mouse",
+        "x": 712.5,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1318,
+        "phase": "move",
+        "id": 1,
+        "device": "mouse",
+        "x": 675,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1351,
+        "phase": "move",
+        "id": 1,
+        "device": "mouse",
+        "x": 637.5,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1382,
+        "phase": "move",
+        "id": 1,
+        "device": "mouse",
+        "x": 600,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1412,
+        "phase": "up",
+        "id": 1,
+        "device": "mouse",
+        "x": 600,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1622,
+        "phase": "down",
+        "id": 1,
+        "device": "mouse",
+        "x": 900,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 2330,
+        "phase": "up",
+        "id": 1,
+        "device": "mouse",
+        "x": 900,
+        "y": 369
+      }
+    ]
+  },
+  "expected": [
+    {
+      "kind": "move",
+      "move": "next"
+    },
+    {
+      "kind": "move",
+      "move": "next"
+    },
+    {
+      "kind": "move",
+      "move": "previous"
+    }
+  ]
+}

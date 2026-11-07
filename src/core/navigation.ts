@@ -24,6 +24,42 @@ export function keyMove(key: string, shift = false): Move | undefined {
   }
 }
 
+/**
+ * How far the same keys move a zoomed page, as a fraction of the screen.
+ * At the edge in that direction they turn the page instead (see keyMove).
+ */
+export function keyPan(key: string, shift = false): [number, number] | undefined {
+  switch (key) {
+    case 'ArrowRight':
+      return [0.3, 0]
+    case 'ArrowLeft':
+      return [-0.3, 0]
+    case 'ArrowDown':
+      return [0, 0.3]
+    case 'ArrowUp':
+      return [0, -0.3]
+    case 'PageDown':
+      return [0, 0.9]
+    case 'PageUp':
+      return [0, -0.9]
+    case ' ':
+      return [0, shift ? -0.9 : 0.9]
+  }
+}
+
+/** Zoom keys, until the gesture engine brings pinch and Ctrl+wheel. */
+export function keyZoom(key: string): 'in' | 'out' | 'fit' | undefined {
+  switch (key) {
+    case '+':
+    case '=':
+      return 'in'
+    case '-':
+      return 'out'
+    case '0':
+      return 'fit'
+  }
+}
+
 /** Tap and click zones: the left and right quarter of the page area. */
 export function tapMove(x: number, width: number): Move | undefined {
   if (x < width * 0.25) return 'previous'

@@ -157,6 +157,19 @@ adb logcat -s Tauri/Console
 
 The webview of a dev build can also be inspected from the PC: open `chrome://inspect` in Chrome or Edge with the phone connected, and gutter is listed under the phone.
 
+## Recording input
+
+Development builds (`pnpm tauri dev`, `pnpm tauri android dev`) have a "● Rec" button in the header: press it, make the gesture, press "■ Stop". The events are saved as JSON and the header shows where:
+
+- **Windows:** `%APPDATA%\io.github.iareb.gutter\recordings\`
+- **Linux:** `~/.local/share/io.github.iareb.gutter/recordings/`
+- **Android:** inside the app's private storage, at the full path the header shows; copy it out with
+  ```sh
+  adb exec-out run-as io.github.iareb.gutter cat <full path> > recording.json
+  ```
+
+To turn a recording into a test, put it in `tests/recordings/` as `{ "description": …, "recording": …, "expected": [actions] }`; `pnpm test` replays every file there. Release builds have neither the button nor the command that saves.
+
 ## Test files
 
 Copyrighted comics cannot go in the repo. `pnpm corpus` generates synthetic test volumes in `corpus/generated/` (about 130 MB); [corpus/README.md](../corpus/README.md) explains each one and where to put real comics.

@@ -1,0 +1,163 @@
+{
+  "description": "Touch on WebView2 with touch emulation: tap right, right, left, middle; two fingers down together; a swipe from right to left. Only the three taps on the sides turn pages (swipes come in step 2.4).",
+  "recording": {
+    "version": 1,
+    "device": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
+    "area": {
+      "width": 1000,
+      "height": 738,
+      "dpr": 1
+    },
+    "events": [
+      {
+        "kind": "pointer",
+        "t": 0,
+        "phase": "down",
+        "id": 2,
+        "device": "touch",
+        "x": 900,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 68,
+        "phase": "up",
+        "id": 2,
+        "device": "touch",
+        "x": 900,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 326,
+        "phase": "down",
+        "id": 3,
+        "device": "touch",
+        "x": 900,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 388,
+        "phase": "up",
+        "id": 3,
+        "device": "touch",
+        "x": 900,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 653,
+        "phase": "down",
+        "id": 4,
+        "device": "touch",
+        "x": 100,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 719,
+        "phase": "up",
+        "id": 4,
+        "device": "touch",
+        "x": 100,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 987,
+        "phase": "down",
+        "id": 5,
+        "device": "touch",
+        "x": 500,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1051,
+        "phase": "up",
+        "id": 5,
+        "device": "touch",
+        "x": 500,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1308,
+        "phase": "down",
+        "id": 6,
+        "device": "touch",
+        "x": 850,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1308,
+        "phase": "down",
+        "id": 7,
+        "device": "touch",
+        "x": 200,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1376,
+        "phase": "up",
+        "id": 6,
+        "device": "touch",
+        "x": 850,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1376,
+        "phase": "up",
+        "id": 7,
+        "device": "touch",
+        "x": 200,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1631,
+        "phase": "down",
+        "id": 8,
+        "device": "touch",
+        "x": 900,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1632,
+        "phase": "move",
+        "id": 8,
+        "device": "touch",
+        "x": 820,
+        "y": 369
+      },
+      {
+        "kind": "pointer",
+        "t": 1633,
+        "phase": "cancel",
+        "id": 8,
+        "device": "touch",
+        "x": 0,
+        "y": -62
+      }
+    ]
+  },
+  "expected": [
+    {
+      "kind": "move",
+      "move": "next"
+    },
+    {
+      "kind": "move",
+      "move": "next"
+    },
+    {
+      "kind": "move",
+      "move": "previous"
+    }
+  ]
+}

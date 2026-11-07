@@ -1,0 +1,42 @@
+{
+  "description": "Three mouse wheel notches on WebView2: no action until step 2.5.",
+  "recording": {
+    "version": 1,
+    "device": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
+    "area": {
+      "width": 1000,
+      "height": 738,
+      "dpr": 1
+    },
+    "events": [
+      {
+        "kind": "wheel",
+        "t": 0,
+        "dx": 0,
+        "dy": 100,
+        "ctrl": false,
+        "x": 500,
+        "y": 369
+      },
+      {
+        "kind": "wheel",
+        "t": 129,
+        "dx": 0,
+        "dy": 100,
+        "ctrl": false,
+        "x": 500,
+        "y": 369
+      },
+      {
+        "kind": "wheel",
+        "t": 246,
+        "dx": 0,
+        "dy": 100,
+        "ctrl": false,
+        "x": 500,
+        "y": 369
+      }
+    ]
+  },
+  "expected": []
+}

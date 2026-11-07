@@ -1,5 +1,36 @@
 import { describe, expect, it } from 'vitest'
-import { keyMove, movePage, tapMove } from './navigation'
+import { keyMove, keyPan, keyZoom, movePage, tapMove } from './navigation'
+
+describe('keyPan', () => {
+  it('moves a zoomed page in the direction of the arrow', () => {
+    expect(keyPan('ArrowRight')).toEqual([0.3, 0])
+    expect(keyPan('ArrowLeft')).toEqual([-0.3, 0])
+    expect(keyPan('ArrowDown')).toEqual([0, 0.3])
+    expect(keyPan('ArrowUp')).toEqual([0, -0.3])
+  })
+
+  it('moves almost a screen with Page Up/Down and Space', () => {
+    expect(keyPan('PageDown')).toEqual([0, 0.9])
+    expect(keyPan(' ')).toEqual([0, 0.9])
+    expect(keyPan('PageUp')).toEqual([0, -0.9])
+    expect(keyPan(' ', true)).toEqual([0, -0.9])
+  })
+
+  it('leaves Home and End to page navigation', () => {
+    expect(keyPan('Home')).toBeUndefined()
+    expect(keyPan('End')).toBeUndefined()
+  })
+})
+
+describe('keyZoom', () => {
+  it('zooms with + (or =, its unshifted key), - and 0', () => {
+    expect(keyZoom('+')).toBe('in')
+    expect(keyZoom('=')).toBe('in')
+    expect(keyZoom('-')).toBe('out')
+    expect(keyZoom('0')).toBe('fit')
+    expect(keyZoom('a')).toBeUndefined()
+  })
+})
 
 describe('keyMove', () => {
   it('goes forward and back with arrows and page keys', () => {

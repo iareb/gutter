@@ -68,6 +68,7 @@ Tooling: ESLint (flat config in `eslint.config.js`) and Prettier (`.prettierrc.j
 | --- | --- |
 | `src/` | Frontend: Svelte UI; `src/core/` holds the TypeScript core |
 | `src-tauri/` | Native side: Rust crate, Tauri config, icons, capabilities |
+| `tests/recordings/` | Input recorded on devices with the expected actions, replayed by `pnpm test`: a gesture bug gets its recording here |
 | `scripts/` | Development scripts in TypeScript, run directly by Node (`make-corpus.ts`) |
 | `corpus/` | Test comics: `generated/` from `pnpm corpus`, `local/` for personal files; both ignored by git, see `corpus/README.md` |
 | `docs/` | Design document, roadmap, setup guide, spike reports, milestone checklists (`docs/checklists/`) |
@@ -84,7 +85,7 @@ Single maintainer, no pull requests: work lands directly on `main`. The plan, st
 - Small steps, one feature each.
 - CI runs on every push to `main`, on Ubuntu and Windows: `pnpm check`, `pnpm test`, then `pnpm tauri build --no-bundle`. A red CI is fixed before anything else.
 - The maintainer validates behavior, not code. Prefer evidence they can check without reading code: test results, benchmark numbers against the targets in the design doc, before/after screenshots.
-- A reported gesture bug becomes a recorded event sequence and a regression test.
+- A reported gesture bug becomes a recorded event sequence and a regression test: record it with the "● Rec" button of a development build (`pnpm tauri dev`), add it to `tests/recordings/` with the actions it must produce. See [docs/setup.md](docs/setup.md#recording-input).
 - When a decision in the design doc turns out wrong, update `docs/design.md` in the same change and explain why in plain language.
 - Update this file in the same change that alters architecture, commands or rules.
 
