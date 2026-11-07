@@ -23,4 +23,8 @@ body,
 body {
   overflow: hidden;
   user-select: none;
+  /* No double-tap zoom: on Android the webview held back quick taps to see if a
+     second one followed, and fast page turns were lost. Zoom comes from the
+     gesture engine in M2 */
+  touch-action: manipulation;
 }
