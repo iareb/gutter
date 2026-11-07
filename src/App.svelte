@@ -1,5 +1,6 @@
 <script lang="ts">
   import { open } from '@tauri-apps/plugin-dialog'
+  import { keyMove, movePage, type Move } from './core/navigation'
   import { fileName, openVolume, type Volume } from './core/volume'
   import PageView from './PageView.svelte'
 
@@ -7,6 +8,8 @@
   let title = $state<string>()
   let error = $state<string>()
   let busy = $state(false)
+  /** Current page, counted from 0. */
+  let page = $state(0)
 
   async function pick() {
     const path = await open({ multiple: false, directory: false })
@@ -16,27 +19,44 @@
     try {
       volume = await openVolume(path)
       title = fileName(path)
+      page = 0
     } catch (e) {
       volume = undefined
       error = String(e)
     } finally {
       busy = false
+      // Otherwise Space and Enter would press the button again instead of turning pages
+      ;(document.activeElement as HTMLElement | null)?.blur()
     }
   }
+
+  function go(move: Move) {
+    if (volume) page = movePage(move, page, volume.pages.length)
+  }
+
+  function onkeydown(event: KeyboardEvent) {
+    if (!volume || event.ctrlKey || event.altKey || event.metaKey) return
+    const move = keyMove(event.key, event.shiftKey)
+    if (!move) return
+    event.preventDefault()
+    go(move)
+  }
 </script>
+
+<svelte:window {onkeydown} />
 
 <main>
   <header>
     <button onclick={pick} disabled={busy}>Open comic…</button>
     {#if volume}
-      <span>{title ?? 'Comic'} · {volume.pages.length} pages</span>
+      <span>{title ?? 'Comic'} · {page + 1} / {volume.pages.length}</span>
     {/if}
   </header>
 
   {#if error}
     <p class="error" role="alert">{error}</p>
   {:else if volume}
-    <PageView {volume} page={0} onerror={(message) => (error = message)} />
+    <PageView {volume} {page} onmove={go} />
   {:else}
     <p class="empty">gutter</p>
   {/if}

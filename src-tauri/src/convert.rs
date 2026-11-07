@@ -4,14 +4,14 @@
 /// Converts a page, given its bytes and MIME type, to PNG.
 pub fn to_png(bytes: &[u8], mime: &str) -> Result<Vec<u8>, String> {
     if mime != "image/avif" {
-        return Err("this format has no fallback decoder".into());
+        return Err("it is damaged or in a format gutter cannot read".into());
     }
     avif_to_png(bytes)
 }
 
 #[cfg(not(target_os = "linux"))]
 fn avif_to_png(_bytes: &[u8]) -> Result<Vec<u8>, String> {
-    Err("this build has no AVIF decoder".into())
+    Err("AVIF is not supported on this system".into())
 }
 
 #[cfg(target_os = "linux")]

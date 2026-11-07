@@ -1,18 +1,21 @@
 <script lang="ts">
   // Shows one page at the screen's physical resolution. The page bytes are
   // fetched once; resizing the window or moving it to a screen with another
-  // pixel density decodes them again at the new size.
+  // pixel density decodes them again at the new size. A page that cannot be
+  // shown gets a message in its place, and the other pages stay readable.
   import { decode } from './core/decode'
   import { fitPage, type Size } from './core/fit'
+  import { tapMove, type Move } from './core/navigation'
   import { loadConvertedPage, loadPage, type PageData, type Volume } from './core/volume'
 
   type Props = {
     volume: Volume
     /** Counted from 0. */
     page: number
-    onerror: (message: string) => void
+    /** A tap or click on the left or right quarter. */
+    onmove: (move: Move) => void
   }
-  let { volume, page, onerror }: Props = $props()
+  let { volume, page, onmove }: Props = $props()
 
   let box: HTMLDivElement
   let canvas: HTMLCanvasElement
@@ -21,15 +24,24 @@
   let dpr = $state(devicePixelRatio)
   // Raw: a converted page replaces the bytes in place, without rendering again
   let data = $state.raw<PageData>()
+  /** Why the current page cannot be shown. */
+  let failure = $state<string>()
 
   const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
+  function fail(e: unknown) {
+    failure = message(e)
+    // The previous page must not stay on screen under the new page number
+    canvas.width = 0
+  }
 
   $effect(() => {
     let cancelled = false
     data = undefined
+    failure = undefined
     loadPage(volume, page).then(
       (loaded) => !cancelled && (data = loaded),
-      (e) => !cancelled && onerror(message(e)),
+      (e) => !cancelled && fail(e),
     )
     return () => (cancelled = true)
   })
@@ -64,7 +76,7 @@
   $effect(() => {
     if (!data || !viewport || viewport.width < 1 || viewport.height < 1) return
     let cancelled = false
-    render(data, viewport, dpr, () => cancelled).catch((e) => !cancelled && onerror(message(e)))
+    render(data, viewport, dpr, () => cancelled).catch((e) => !cancelled && fail(e))
     return () => (cancelled = true)
   })
 
@@ -125,8 +137,21 @@
   }
 </script>
 
-<div class="box" bind:this={box}>
+<!-- Keyboard users turn pages with the keys handled in App.svelte -->
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+<div
+  class="box"
+  bind:this={box}
+  onclick={(event) => {
+    const rect = box.getBoundingClientRect()
+    const move = tapMove(event.clientX - rect.left, rect.width)
+    if (move) onmove(move)
+  }}
+>
   <canvas bind:this={canvas} width="0" height="0" aria-label="Page {page + 1}"></canvas>
+  {#if failure}
+    <p class="failure" role="alert">{failure}</p>
+  {/if}
 </div>
 
 <style>
@@ -135,6 +160,17 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
+  }
+
+  .failure {
+    display: grid;
+    place-items: center;
+    height: 100%;
+    margin: 0;
+    padding: 16px;
+    box-sizing: border-box;
+    color: #e08a8a;
+    text-align: center;
   }
 
   canvas {
