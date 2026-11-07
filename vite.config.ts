@@ -15,10 +15,13 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     host: host || '127.0.0.1',
-    // No HMR on a phone: while the system file picker is open the app is in the
-    // background, the HMR connection drops and Vite reloads the page on reconnect,
-    // losing the open volume. Restart `tauri android dev` to see code changes.
+    // No dev server connection on a phone: while the system file picker is open
+    // the app is in the background, the connection drops and Vite reloads the page
+    // on reconnect, losing the open volume. `hmr: false` alone keeps the
+    // connection (and the reload): `ws: false` removes it. Restart
+    // `tauri android dev` to see code changes.
     hmr: host ? false : undefined,
+    ws: host ? false : undefined,
     watch: {
       ignored: ['**/src-tauri/**'],
     },
