@@ -13,6 +13,17 @@ gutter has a single maintainer, so there are no pull requests: work lands direct
 
 Spikes (M0.5) live on throwaway branches named `spike/<name>` that are never merged; only their write-up in `docs/spikes/` lands on `main`.
 
+## Status
+
+| Milestone | State |
+| --- | --- |
+| M0 — Skeleton | **Done** (Nov 1, 2026) |
+| M0.5 — Risk check | **Done** (Nov 2), except trackpad pinch on Windows: no laptop with a trackpad yet |
+| M1 — Basic viewer | **Done** (Nov 7): [checklist](checklists/m1.md) passed on Windows, Linux and Android |
+| M2 — Gesture engine | Next |
+
+Estimates were revised at the end of M1, see the [design document](design.md#roadmap-and-open-questions).
+
 ## M0 — Skeleton
 
 | Step | Content | How to try it |
@@ -57,7 +68,7 @@ Built from the spike results: the spike code is a starting point, rewritten with
 | 1.4 Format fallback | If the webview cannot decode a page (AVIF on WebKitGTK), the UI asks Rust for it as PNG (from `image-formats`); pages Rust cannot decode either show a clear error | Every page of `formats.cbz` shows on Linux |
 | 1.5 Navigation | Keyboard, click and tap on the sides | Read `basic.cbz` front to back with keys and taps |
 | 1.6 Benchmark | `<canvas>` vs `<img>`: quality and time on Windows, Linux and Android | **Done:** `<canvas>` 2D. See [spikes/canvas-vs-img.md](spikes/canvas-vs-img.md) |
-| 1.7 Milestone checklist | 15 concrete actions on the built app, on Windows, Linux and Android; each failure becomes an issue | Every cell of [checklists/m1.md](checklists/m1.md) is ok |
+| 1.7 Milestone checklist | 15 concrete actions on the built app, on Windows, Linux and Android; each failure becomes an issue | **Done:** every cell of [checklists/m1.md](checklists/m1.md) is ok |
 
 ## M2 onwards
 
