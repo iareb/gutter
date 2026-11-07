@@ -20,7 +20,7 @@ Spikes (M0.5) live on throwaway branches named `spike/<name>` that are never mer
 | M0 — Skeleton | **Done** (Nov 1, 2026) |
 | M0.5 — Risk check | **Done** (Nov 2), except trackpad pinch on Windows: no laptop with a trackpad yet |
 | M1 — Basic viewer | **Done** (Nov 7): [checklist](checklists/m1.md) passed on Windows, Linux and Android |
-| M2 — Gesture engine | Next |
+| M2 — Gesture engine | Next: steps below |
 
 Estimates were revised at the end of M1, see the [design document](design.md#roadmap-and-open-questions).
 
@@ -70,11 +70,25 @@ Built from the spike results: the spike code is a starting point, rewritten with
 | 1.6 Benchmark | `<canvas>` vs `<img>`: quality and time on Windows, Linux and Android | **Done:** `<canvas>` 2D. See [spikes/canvas-vs-img.md](spikes/canvas-vs-img.md) |
 | 1.7 Milestone checklist | 15 concrete actions on the built app, on Windows, Linux and Android; each failure becomes an issue | **Done:** every cell of [checklists/m1.md](checklists/m1.md) is ok |
 
-## M2 onwards
+## M2 — Gesture engine
+
+Zoom, pan and page turns by touch, mouse, trackpad and keyboard, with the rule from the design doc: one gesture, one action. All input goes through one module, a state machine in the TypeScript core that sees normalized events from small per-platform adapters. Thresholds are constants in one place for now; a settings screen comes later. Windows trackpad pinch cannot be tested yet (no laptop with a trackpad): it follows the documented Chromium behavior and gets checked when a trackpad is available.
+
+| Step | Content | How to try it |
+| --- | --- | --- |
+| 2.1 Zoomed rendering | Viewer state: page, zoom, offset. A zoomed page is decoded again at the zoom's physical resolution (never above the original) and only the visible part is drawn, still 1:1; the offset is clamped so the page never leaves the screen. Driven by temporary keys (+, −, arrows) until the gestures exist | `basic.cbz` at 200% and 400%: the tiny digits get sharper, never blurrier; panning stops at the edges |
+| 2.2 Events, recording, replay | Normalized input events (pointer, wheel, key, pinch) with timestamps; adapters from the webview's events; a development-only recorder that saves a gesture to a file; Vitest replays recordings into the engine | A recorded swipe replayed in `pnpm test` gives the same result every time |
+| 2.3 State machine | States idle, pan, pinch, page change in progress; during a page change other input is ignored; each gesture yields exactly one action. Pure TypeScript, tested with synthetic and recorded sequences | `pnpm test`: a swipe that turns a page cannot also pan, and vice versa |
+| 2.4 Touch | Pinch centered between the fingers; pan when zoomed; swipe turns the page only past a distance **and** a velocity threshold, otherwise snaps back, with the page following the finger and a 150–250 ms slide; double tap: 2× on the tapped area, then back to fit; at the edge of a zoomed page a new swipe turns the page. Tuned on the phone | On Android: 50 swipes on `basic.cbz` without a double page turn; zoom stays under the fingers |
+| 2.5 Mouse and keyboard | Wheel: one notch, one page, or vertical pan when zoomed; Ctrl+wheel: zoom on the cursor; double click like double tap; arrows and Page Up/Down pan a zoomed page, then turn at the edge | On Windows and Linux: read `basic.cbz` with the wheel, zoom on a detail with Ctrl+wheel |
+| 2.6 Trackpad | Two-finger scroll accumulates and turns the page past a threshold, then input is locked until the inertia dies out, telling inertia apart by the trend of the deltas; pinch as Ctrl+wheel on Chromium, from Rust through the GTK handler on Linux (from the `trackpad-pinch` spike) | On the Linux laptop: 50 flicks on `basic.cbz`, each turning exactly one page; pinch zooms without the whole window zooming |
+| 2.7 Controls on demand | Tap or click in the center shows and hides the header, so the page can use the whole screen | The page fills the screen; one tap brings the controls back |
+| 2.8 Milestone checklist | Concrete gesture actions on Windows, Linux and Android, including the requirement "no double skip in 50 consecutive swipes"; each failure becomes a recorded sequence and a regression test | Every cell of `checklists/m2.md` is ok |
+
+## M3 onwards
 
 Detailed steps are written at the end of the previous milestone.
 
-- **M2 — Gesture engine:** state machine, event recording and replay, tuning on Android.
 - **M3 — Reading modes:** double page, vertical scroll, manga direction, preloading and memory budget.
 - **M4 — Library:** cover grid, thumbnails, reading position in SQLite.
 - **M5 — Formats and release:** CBR, image folders, release 0.1.
