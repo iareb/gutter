@@ -1,6 +1,7 @@
 use tauri::Manager;
 
 pub mod archive;
+pub mod convert;
 pub mod protocol;
 pub mod volume;
 

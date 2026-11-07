@@ -117,7 +117,7 @@ Every page is drawn from the original image, at the screen's physical resolution
 
 For very large pages (scans over ~8000 px per side), high zoom uses tiled rendering: only the visible portion is decoded and drawn. An 8000 × 6000 page decoded in full takes about 190 MB, more than the entire mobile budget.
 
-Formats: JPEG (including progressive and CMYK), PNG and WebP decode correctly in all webviews. AVIF does not: it works on WebView2 and Android but not on Ubuntu's WebKitGTK ([`image-formats` spike](spikes/image-formats.md)). Support depends on how each webview is built, so it is detected at runtime, not assumed per platform: if the webview fails to decode a page, the page is decoded in Rust (`image` crate) and served as PNG. JPEG XL is not supported for now (WebView2 cannot decode it); the same fallback could cover it later.
+Formats: JPEG (including progressive and CMYK), PNG and WebP decode correctly in all webviews. AVIF does not: it works on WebView2 and Android but not on Ubuntu's WebKitGTK ([`image-formats` spike](spikes/image-formats.md)). Support depends on how each webview is built, so it is detected at runtime, not assumed per platform: if the webview fails to decode a page, the UI asks Rust for the same page as PNG (`page://<volume>/<n>/png`) and keeps those bytes for later re-renders. Rust decodes AVIF with `avif-decode` (pure Rust, BSD, built on rav1d), compiled only on Linux, the only platform that needs it so far; other formats have no fallback decoder and show a clear error. JPEG XL is not supported for now (WebView2 cannot decode it); the same fallback could cover it later.
 
 Rule: no image is ever recompressed to JPEG or cached at reduced quality for reading.
 

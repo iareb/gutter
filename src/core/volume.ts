@@ -28,8 +28,20 @@ export type PageData = {
 }
 
 /** Fetches the encoded bytes of a page. Rejects with the message Rust sent. */
-export async function loadPage(volume: Volume, n: number): Promise<PageData> {
-  const response = await fetch(pageUrl(volume, n))
+export function loadPage(volume: Volume, n: number): Promise<PageData> {
+  return fetchPage(pageUrl(volume, n))
+}
+
+/**
+ * Fetches a page decoded by Rust and converted to PNG, for when the webview
+ * cannot decode the original. Lossless, but much slower than the original.
+ */
+export function loadConvertedPage(volume: Volume, n: number): Promise<PageData> {
+  return fetchPage(`${pageUrl(volume, n)}/png`)
+}
+
+async function fetchPage(url: string): Promise<PageData> {
+  const response = await fetch(url)
   if (!response.ok) throw new Error(await response.text())
   const width = Number(response.headers.get('x-page-width'))
   const height = Number(response.headers.get('x-page-height'))

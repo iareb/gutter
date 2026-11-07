@@ -1,20 +1,41 @@
 //! The `page` protocol: the webview loads page `n` (counted from 0) of volume
 //! `id` from `page://localhost/<id>/<n>`, or `http://page.localhost/<id>/<n>` on
 //! Windows and Android. Page bytes never travel through IPC messages.
+//!
+//! `<id>/<n>/png` is the same page decoded by Rust, for a webview that cannot
+//! decode the original (AVIF on WebKitGTK).
 
 use tauri::http::{Response, StatusCode, header};
 
+use crate::convert;
 use crate::volume::Volumes;
 
-/// Parses `/<id>/<n>` from the request path.
-pub fn parse(path: &str) -> Option<(u32, usize)> {
-    let (id, n) = path.strip_prefix('/')?.split_once('/')?;
-    Some((id.parse().ok()?, n.parse().ok()?))
+/// A request parsed from its path, `/<id>/<n>` or `/<id>/<n>/png`.
+#[derive(Debug, PartialEq, Eq)]
+pub struct PageRequest {
+    pub id: u32,
+    pub n: usize,
+    pub as_png: bool,
+}
+
+pub fn parse(path: &str) -> Option<PageRequest> {
+    let mut parts = path.strip_prefix('/')?.split('/');
+    let id = parts.next()?.parse().ok()?;
+    let n = parts.next()?.parse().ok()?;
+    let as_png = match parts.next() {
+        None => false,
+        Some("png") => true,
+        Some(_) => return None,
+    };
+    parts
+        .next()
+        .is_none()
+        .then_some(PageRequest { id, n, as_png })
 }
 
 /// Answers a request for a page. Blocking: call it off the webview's thread.
 pub fn respond(volumes: &Volumes, path: &str) -> Response<Vec<u8>> {
-    let Some((id, n)) = parse(path) else {
+    let Some(PageRequest { id, n, as_png }) = parse(path) else {
         return error(
             StatusCode::BAD_REQUEST,
             format!("Not a page address: {path}"),
@@ -26,7 +47,15 @@ pub fn respond(volumes: &Volumes, path: &str) -> Response<Vec<u8>> {
             "This volume is no longer open.".into(),
         );
     };
-    match volume.read_page(n) {
+    let page = volume.read_page(n).and_then(|(bytes, mime)| {
+        if !as_png {
+            return Ok((bytes, mime));
+        }
+        convert::to_png(&bytes, mime)
+            .map(|png| (png, "image/png"))
+            .map_err(|e| format!("Page {} could not be decoded: {e}.", n + 1))
+    });
+    match page {
         Ok((bytes, mime)) => {
             let mut builder = response(StatusCode::OK, mime);
             // The UI needs the size to pick the decode size before decoding.
@@ -75,7 +104,7 @@ mod tests {
     use tauri::http::{StatusCode, header};
     use zip::write::{SimpleFileOptions, ZipWriter};
 
-    use super::{HEIGHT, WIDTH, parse, respond};
+    use super::{HEIGHT, PageRequest, WIDTH, parse, respond};
     use crate::volume::{Volume, Volumes};
 
     /// A volume whose entries hold their own name as content.
@@ -101,10 +130,21 @@ mod tests {
 
     #[test]
     fn parses_page_addresses() {
-        assert_eq!(parse("/0/0"), Some((0, 0)));
-        assert_eq!(parse("/12/345"), Some((12, 345)));
+        let request = |id, n, as_png| Some(PageRequest { id, n, as_png });
+        assert_eq!(parse("/0/0"), request(0, 0, false));
+        assert_eq!(parse("/12/345"), request(12, 345, false));
+        assert_eq!(parse("/12/345/png"), request(12, 345, true));
         for bad in [
-            "", "/", "/1", "/1/", "/x/1", "/1/x", "/1/2/3", "/-1/0", "1/2",
+            "",
+            "/",
+            "/1",
+            "/1/",
+            "/x/1",
+            "/1/x",
+            "/1/2/3",
+            "/-1/0",
+            "1/2",
+            "/1/2/png/x",
         ] {
             assert_eq!(parse(bad), None, "{bad}");
         }
@@ -132,6 +172,19 @@ mod tests {
         let response = respond(&volumes, &format!("/{id}/0"));
         assert_eq!(response.headers()[WIDTH], "3");
         assert_eq!(response.headers()[HEIGHT], "5");
+    }
+
+    #[test]
+    fn explains_when_a_page_cannot_be_converted() {
+        let volumes = Volumes::default();
+        let id = volumes.insert(volume(&["1.jpg"]));
+        let response = respond(&volumes, &format!("/{id}/0/png"));
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let message = String::from_utf8(response.body().clone()).unwrap();
+        assert!(
+            message.starts_with("Page 1 could not be decoded"),
+            "{message}"
+        );
     }
 
     #[test]

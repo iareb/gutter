@@ -4,7 +4,7 @@
   // pixel density decodes them again at the new size.
   import { decode } from './core/decode'
   import { fitPage, type Size } from './core/fit'
-  import { loadPage, type PageData, type Volume } from './core/volume'
+  import { loadConvertedPage, loadPage, type PageData, type Volume } from './core/volume'
 
   type Props = {
     volume: Volume
@@ -19,7 +19,8 @@
   /** Available space, in CSS pixels. */
   let viewport = $state<Size>()
   let dpr = $state(devicePixelRatio)
-  let data = $state<PageData>()
+  // Raw: a converted page replaces the bytes in place, without rendering again
+  let data = $state.raw<PageData>()
 
   const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -67,13 +68,25 @@
     return () => (cancelled = true)
   })
 
+  async function convert(data: PageData, { volume, page }: { volume: Volume; page: number }) {
+    const converted = await loadConvertedPage(volume, page)
+    data.bytes = converted.bytes
+    data.size = converted.size
+  }
+
   async function render(data: PageData, viewport: Size, dpr: number, cancelled: () => boolean) {
+    const source = { volume, page }
     let size = data.size
     if (!size) {
       // No size from Rust: measure by decoding once
-      const probe = await createImageBitmap(data.bytes)
-      size = { width: probe.width, height: probe.height }
-      probe.close()
+      const probe = await createImageBitmap(data.bytes).catch(() => undefined)
+      if (probe) {
+        size = { width: probe.width, height: probe.height }
+        probe.close()
+      } else {
+        await convert(data, source)
+        size = data.size!
+      }
     }
     // Whole physical pixels only: the page must never need rescaling to fit
     const room = {
@@ -82,7 +95,11 @@
     }
     const fit = fitPage(size, room, dpr)
     const target = { width: Math.max(fit.width, 1), height: Math.max(fit.height, 1) }
-    const bitmap = await decode(data.bytes, target)
+    const bitmap = await decode(data.bytes, target).catch(async () => {
+      // The webview cannot decode this page: ask Rust, and keep its PNG for next time
+      await convert(data, source)
+      return decode(data.bytes, target)
+    })
     if (cancelled()) {
       bitmap.close()
       return

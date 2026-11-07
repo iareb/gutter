@@ -9,7 +9,7 @@ Versions below are the ones the project is developed with. Newer ones usually wo
 | Tool | Version | Notes |
 | --- | --- | --- |
 | Git | any recent | |
-| Rust | stable, via [rustup](https://rustup.rs) | 1.97 at the time of writing |
+| Rust | stable, via [rustup](https://rustup.rs) | 1.99 at the time of writing; Linux needs at least 1.98 |
 | Node.js | LTS (22 or later) | |
 | pnpm | 11 | Enabled through Node's corepack: `corepack enable pnpm` |
 
@@ -33,21 +33,21 @@ Any terminal works. In Git Bash, prefix commands that take Android paths (`adb s
 
 ## Linux
 
-Tauri uses WebKitGTK, so the system needs its development libraries.
+Tauri uses WebKitGTK, so the system needs its development libraries. `nasm` is for the Rust AVIF decoder, which only Linux builds use.
 
 **Debian, Ubuntu and derivatives:**
 
 ```sh
 sudo apt update
 sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
-  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev nasm
 ```
 
 **Fedora:**
 
 ```sh
 sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file \
-  libappindicator-gtk3-devel librsvg2-devel libxdo-devel
+  libappindicator-gtk3-devel librsvg2-devel libxdo-devel nasm
 sudo dnf group install "c-development"
 ```
 
@@ -55,7 +55,7 @@ sudo dnf group install "c-development"
 
 ```sh
 sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget file openssl \
-  appmenu-gtk-module libappindicator-gtk3 librsvg xdotool
+  appmenu-gtk-module libappindicator-gtk3 librsvg xdotool nasm
 ```
 
 The [Tauri prerequisites page](https://v2.tauri.app/start/prerequisites/#linux) lists other distributions.
