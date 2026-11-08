@@ -48,6 +48,16 @@
   /** Why the current page cannot be shown. */
   let failure = $state<string>()
 
+  /** How long the page takes to slide back in place, or out of the screen. */
+  const SLIDE_MS = 200
+  /** Sideways shift of the page during a swipe, in CSS pixels. */
+  let offset = $state(0)
+  /** Whether the shift is animated: not while following the finger. */
+  let sliding = $state(false)
+  /** The old page is sliding out: the new one is drawn once it is gone. */
+  let leaving = $state(false)
+  let leaveTimer: ReturnType<typeof setTimeout> | undefined
+
   /** The space for the page in whole physical pixels: it must never need rescaling to fit. */
   const room = $derived(
     viewport && {
@@ -100,6 +110,47 @@
     view = zoomAround(view, factor, { x: x * dpr, y: y * dpr }, fit, room)
   }
 
+  /** Shows the page shifted sideways by `dx` CSS pixels: it follows the finger. */
+  export function follow(dx: number) {
+    if (leaving) return
+    sliding = false
+    // On a whole physical pixel, like the page itself
+    offset = Math.round(dx * dpr) / dpr
+  }
+
+  /** Slides the page back in place after a swipe that did not turn it. */
+  export function settle() {
+    if (leaving) return
+    sliding = true
+    offset = 0
+  }
+
+  /**
+   * Slides the page out of the screen, to the left (-1) or the right (1), before
+   * the page changes. The new page is drawn once the old one is gone.
+   */
+  export function leave(direction: -1 | 1) {
+    sliding = true
+    leaving = true
+    offset = direction * box.getBoundingClientRect().width
+    clearTimeout(leaveTimer)
+    leaveTimer = setTimeout(() => {
+      // Not decoded yet: the canvas still holds the old page, which must not come back
+      if (!decoded) canvas.width = 0
+      sliding = false
+      offset = 0
+      leaving = false
+    }, SLIDE_MS)
+  }
+
+  /** Which sides of the page are on screen: past them it cannot be dragged. */
+  export function edges() {
+    if (!fit || !room) return { left: true, right: true }
+    const shown = shownSize(fit, view.zoom)
+    const r = visibleRect(view, shown, room)
+    return { left: r.x === 0, right: r.x + r.width === shown.width }
+  }
+
   export const zoomed = () => view.zoom > 1
   /** The page area, in CSS pixels. */
   export const area = () => {
@@ -128,7 +179,14 @@
     failure = undefined
     view = FIT_VIEW
     // Untracked: this effect must run on a page change, not when a decode arrives
-    untrack(() => setDecoded(undefined))
+    untrack(() => {
+      setDecoded(undefined)
+      // A page turned by a swipe keeps sliding out; any other change shows the page in place
+      if (!leaving) {
+        sliding = false
+        offset = 0
+      }
+    })
     loadPage(volume, page).then(
       (loaded) => !cancelled && (data = loaded),
       (e) => !cancelled && fail(e),
@@ -207,10 +265,13 @@
     if (!sameView(clamped, view)) view = clamped
   })
 
-  // Draw the visible part: on every pan, and whenever a new decode arrives
+  // Draw the visible part: on every pan, and whenever a new decode arrives.
+  // While the old page slides out, the new one waits
   $effect(() => {
-    if (decoded && fit && room) draw(decoded, fit, view, room, dpr)
+    if (!leaving && decoded && fit && room) draw(decoded, fit, view, room, dpr)
   })
+
+  $effect(() => () => clearTimeout(leaveTimer))
 
   async function convert(data: PageData) {
     const converted = await loadConvertedPage(volume, page)
@@ -283,7 +344,14 @@
   onpointercancel={pointer}
   onwheel={(event) => oninput(fromWheel(event, box.getBoundingClientRect(), 0))}
 >
-  <canvas bind:this={canvas} width="0" height="0" aria-label="Page {page + 1}"></canvas>
+  <canvas
+    bind:this={canvas}
+    width="0"
+    height="0"
+    aria-label="Page {page + 1}"
+    style:transform={offset ? `translateX(${offset}px)` : undefined}
+    style:transition={sliding ? `transform ${SLIDE_MS}ms ease-out` : undefined}
+  ></canvas>
   {#if failure}
     <p class="failure" role="alert">{failure}</p>
   {/if}

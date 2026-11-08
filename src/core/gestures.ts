@@ -3,13 +3,21 @@
 // exactly one kind of action: it moves the view or turns the page, never both.
 //
 // States: idle; pressed (a pointer is down and has not moved yet); pan
-// (dragging a zoomed page); swipe (a finger dragging a fitted page); pinch (two
-// fingers); done (the gesture is over but fingers are still down: they are
-// ignored until all are up, so the end of a pinch cannot become a pan).
-// After a swipe has turned the page, pointer input is ignored for TURN_LOCK_MS:
-// the "page change in progress" state of the design doc.
+// (dragging a zoomed page); swipe (a finger dragging the page sideways to turn
+// it); pinch (two fingers); done (the gesture is over but fingers are still
+// down: they are ignored until all are up, so the end of a pinch cannot become
+// a pan). After a swipe has turned the page, pointer input is ignored for
+// TURN_LOCK_MS: the "page change in progress" state of the design doc.
 //
-// Thresholds are first guesses: step 2.4 tunes them on real devices.
+// A swipe starts on a fitted page, or on a zoomed page that is already at its
+// edge in the direction of the swipe: there the page cannot move any further,
+// so pulling it turns it. The gesture that brought the page to its edge stays a
+// pan to the end; it takes a new one to turn.
+//
+// A double tap zooms 2x on the tapped point, and on a zoomed page goes back to
+// fit. On a fitted page only the middle of the screen takes double taps: taps
+// on the sides turn the page at once, without waiting to see if a second tap
+// comes.
 import type { InputEvent, PointerInput } from './input'
 import { keyMove, keyPan, keyZoom, tapMove, type Move } from './navigation'
 
@@ -22,10 +30,20 @@ export type Action =
   | { kind: 'zoom'; how: 'in' | 'out' | 'fit' }
   /** Zoom by `factor` keeping the point (x, y) of the page area, in CSS pixels, still. */
   | { kind: 'zoomAt'; factor: number; x: number; y: number }
+  /** During a swipe: show the page shifted sideways by `dx` CSS pixels, under the finger. */
+  | { kind: 'follow'; dx: number }
+  /** A swipe that does not turn the page: slide it back in place. */
+  | { kind: 'settle' }
+  /** A swipe that turns the page: slide it out of the screen, then show the new one. */
+  | { kind: 'turn'; move: 'next' | 'previous' }
 
 /** A tap moves less than this, in CSS pixels, and lasts less than TAP_MS. */
 export const TAP_SLOP = 10
 export const TAP_MS = 500
+/** A second tap within this time and distance of the first makes a double tap. */
+export const DOUBLE_TAP_MS = 300
+export const DOUBLE_TAP_SLOP = 30
+export const DOUBLE_TAP_ZOOM = 2
 /** A swipe turns the page past both a distance (fraction of the width) and a speed. */
 export const SWIPE_DISTANCE = 0.15
 export const SWIPE_SPEED = 0.3 // CSS pixels per millisecond
@@ -35,12 +53,21 @@ export type Context = {
   /** Width of the page area, in CSS pixels. */
   width: () => number
   zoomed: () => boolean
+  /** Which sides of a zoomed page are on screen: past them it cannot be dragged. */
+  edges: () => { left: boolean; right: boolean }
 }
 
 type Point = { x: number; y: number }
+type Pressed = {
+  kind: 'pressed'
+  id: number
+  device: PointerInput['device']
+  start: Point
+  t0: number
+}
 type State =
   | { kind: 'idle' }
-  | { kind: 'pressed'; id: number; device: PointerInput['device']; start: Point; t0: number }
+  | Pressed
   | { kind: 'pan'; id: number; last: Point }
   | { kind: 'swipe'; id: number; start: Point; t0: number }
   | { kind: 'pinch'; fingers: Map<number, Point>; distance: number }
@@ -54,6 +81,8 @@ export class GestureEngine {
   /** Pointers currently down, wherever the state machine is. */
   private down = new Map<number, Point>()
   private lockedUntil = -Infinity
+  /** The last tap that could be the first half of a double tap. */
+  private lastTap: { t: number; p: Point } | undefined
 
   constructor(private context: Context) {}
 
@@ -102,6 +131,7 @@ export class GestureEngine {
         if (e.phase !== 'down') return []
         if (e.t < this.lockedUntil) {
           // The page is still turning: this pointer is ignored to the end
+          this.lastTap = undefined
           this.state = { kind: 'done' }
           return []
         }
@@ -109,26 +139,32 @@ export class GestureEngine {
         return []
 
       case 'pressed': {
-        if (e.phase === 'down') return this.startPinch()
+        if (e.phase === 'down') {
+          this.lastTap = undefined
+          return this.startPinch()
+        }
         if (e.id !== s.id) return []
-        if (e.phase === 'cancel') return []
-        if (e.phase === 'up') {
-          const tap = distance(p, s.start) <= TAP_SLOP && e.t - s.t0 <= TAP_MS
-          // On a zoomed page the sides do not turn it (design doc: one gesture, one action)
-          if (!tap || this.context.zoomed()) return []
-          const move = tapMove(p.x, this.context.width())
-          return move ? [{ kind: 'move', move }] : []
+        if (e.phase === 'cancel') {
+          this.lastTap = undefined
+          return []
         }
-        if (distance(p, s.start) <= TAP_SLOP) return []
-        if (this.context.zoomed()) {
+        if (e.phase === 'up') return this.tap(s, p, e.t)
+        const dx = p.x - s.start.x
+        const dy = p.y - s.start.y
+        if (Math.hypot(dx, dy) <= TAP_SLOP) return []
+        // Moved: not a tap, and not the first half of a double tap
+        this.lastTap = undefined
+        const zoomed = this.context.zoomed()
+        // A mouse never swipes: dragging a fitted page with it does nothing
+        if (s.device !== 'mouse' && (!zoomed || this.pullsAtEdge(dx, dy))) {
+          this.state = { kind: 'swipe', id: s.id, start: s.start, t0: s.t0 }
+          return [{ kind: 'follow', dx }]
+        }
+        if (zoomed) {
           this.state = { kind: 'pan', id: s.id, last: p }
-          return [{ kind: 'drag', dx: p.x - s.start.x, dy: p.y - s.start.y }]
+          return [{ kind: 'drag', dx, dy }]
         }
-        // A mouse dragging a fitted page does nothing; a finger may be swiping
-        this.state =
-          s.device === 'mouse'
-            ? { kind: 'done' }
-            : { kind: 'swipe', id: s.id, start: s.start, t0: s.t0 }
+        this.state = { kind: 'done' }
         return []
       }
 
@@ -141,16 +177,19 @@ export class GestureEngine {
       }
 
       case 'swipe': {
-        if (e.phase === 'down') return this.startPinch()
-        if (e.id !== s.id || e.phase !== 'up') return []
+        // A second finger makes it a pinch: the page goes back in place first
+        if (e.phase === 'down') return [{ kind: 'settle' }, ...this.startPinch()]
+        if (e.id !== s.id) return []
         const dx = p.x - s.start.x
+        if (e.phase === 'move') return [{ kind: 'follow', dx }]
+        if (e.phase === 'cancel') return [{ kind: 'settle' }]
         const dy = p.y - s.start.y
         const far = Math.abs(dx) >= SWIPE_DISTANCE * this.context.width()
         const fast = Math.abs(dx) / Math.max(e.t - s.t0, 1) >= SWIPE_SPEED
-        if (!far || !fast || Math.abs(dx) < Math.abs(dy)) return []
+        if (!far || !fast || Math.abs(dx) < Math.abs(dy)) return [{ kind: 'settle' }]
         this.lockedUntil = e.t + TURN_LOCK_MS
         // Left to right reading: pulling the page to the left brings the next one
-        return [{ kind: 'move', move: dx < 0 ? 'next' : 'previous' }]
+        return [{ kind: 'turn', move: dx < 0 ? 'next' : 'previous' }]
       }
 
       case 'pinch': {
@@ -173,6 +212,36 @@ export class GestureEngine {
       case 'done':
         return []
     }
+  }
+
+  /**
+   * Whether dragging a zoomed page by (dx, dy) pulls it sideways past an edge
+   * that is already on screen: there it cannot move, so the drag is a swipe.
+   */
+  private pullsAtEdge(dx: number, dy: number) {
+    if (Math.abs(dx) <= Math.abs(dy)) return false
+    const edges = this.context.edges()
+    // Pulling the page to the left asks for more of its right side
+    return dx < 0 ? edges.right : edges.left
+  }
+
+  /** The pointer went up without moving: a tap, maybe the second of a double tap. */
+  private tap(s: Pressed, p: Point, t: number): Action[] {
+    const last = this.lastTap
+    this.lastTap = undefined
+    if (distance(p, s.start) > TAP_SLOP || t - s.t0 > TAP_MS) return []
+    const double =
+      last !== undefined && s.t0 - last.t <= DOUBLE_TAP_MS && distance(p, last.p) <= DOUBLE_TAP_SLOP
+    if (this.context.zoomed()) {
+      // On a zoomed page the sides do not turn it (design doc: one gesture, one action)
+      if (double) return [{ kind: 'zoom', how: 'fit' }]
+    } else {
+      const move = tapMove(p.x, this.context.width())
+      if (move) return [{ kind: 'move', move }]
+      if (double) return [{ kind: 'zoomAt', factor: DOUBLE_TAP_ZOOM, x: p.x, y: p.y }]
+    }
+    this.lastTap = { t, p }
+    return []
   }
 
   /** A second finger: whatever the first was doing, this is now a pinch. */

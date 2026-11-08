@@ -19,6 +19,7 @@
   const engine = new GestureEngine({
     width: () => viewer?.area().width ?? 0,
     zoomed: () => viewer?.zoomed() ?? false,
+    edges: () => viewer?.edges() ?? { left: true, right: true },
   })
 
   async function pick() {
@@ -60,7 +61,23 @@
         return viewer?.drag(action.dx, action.dy)
       case 'zoomAt':
         return viewer?.zoomAt(action.factor, action.x, action.y)
+      case 'follow':
+        return viewer?.follow(action.dx)
+      case 'settle':
+        return viewer?.settle()
+      case 'turn':
+        return turn(action.move)
     }
+  }
+
+  /** A swipe turned the page: the old one slides out. On the first or last page it slides back. */
+  function turn(move: 'next' | 'previous') {
+    if (!volume) return
+    const next = movePage(move, page, volume.pages.length)
+    if (next === page) return viewer?.settle()
+    // Left to right reading: the next page comes from the right, so the old one leaves to the left
+    viewer?.leave(move === 'next' ? -1 : 1)
+    page = next
   }
 
   /** Feeds one event to the gesture engine. Returns whether it did something. */
