@@ -18,7 +18,13 @@
 // fit. On a fitted page only the middle of the screen takes double taps: taps
 // on the sides turn the page at once, without waiting to see if a second tap
 // comes.
-import type { InputEvent, PointerInput } from './input'
+//
+// The wheel turns one page per notch on a fitted page. On a zoomed page it
+// scrolls; like the swipe, it turns the page only in a new burst of wheel
+// events that starts at the edge in that direction, so scrolling down to the
+// bottom of a page never runs on into the next one. Ctrl+wheel (also how
+// Chromium reports a trackpad pinch) zooms on the cursor.
+import type { InputEvent, PointerInput, WheelInput } from './input'
 import { keyMove, keyPan, keyZoom, tapMove, type Move } from './navigation'
 
 export type Action =
@@ -48,14 +54,22 @@ export const DOUBLE_TAP_ZOOM = 2
 export const SWIPE_DISTANCE = 0.15
 export const SWIPE_SPEED = 0.3 // CSS pixels per millisecond
 export const TURN_LOCK_MS = 250
+/** Wheel distance, in CSS pixels, that turns a page: a mouse notch is about 100. */
+export const WHEEL_STEP = 50
+/** A pause longer than this between wheel events starts a new burst. */
+export const WHEEL_GAP_MS = 300
+/** Ctrl+wheel zooms by this factor every 100 CSS pixels of wheel: one notch. */
+export const WHEEL_ZOOM = 1.25
 
 export type Context = {
   /** Width of the page area, in CSS pixels. */
   width: () => number
   zoomed: () => boolean
   /** Which sides of a zoomed page are on screen: past them it cannot be dragged. */
-  edges: () => { left: boolean; right: boolean }
+  edges: () => Edges
 }
+
+export type Edges = { left: boolean; right: boolean; top: boolean; bottom: boolean }
 
 type Point = { x: number; y: number }
 type Pressed = {
@@ -83,6 +97,8 @@ export class GestureEngine {
   private lockedUntil = -Infinity
   /** The last tap that could be the first half of a double tap. */
   private lastTap: { t: number; p: Point } | undefined
+  /** The wheel events going on: whether they started at an edge, and how far they went. */
+  private burst: { last: number; atEdge: boolean; sum: number } | undefined
 
   constructor(private context: Context) {}
 
@@ -96,7 +112,7 @@ export class GestureEngine {
       case 'key':
         return this.key(e.key, e.shift)
       case 'wheel':
-        return [] // step 2.5
+        return this.wheel(e)
       case 'pointer':
         return this.pointer(e)
     }
@@ -109,6 +125,38 @@ export class GestureEngine {
     const pan = keyPan(key, shift)
     if (pan && this.context.zoomed()) return [{ kind: 'pan', fx: pan[0], fy: pan[1], orMove: move }]
     return move ? [{ kind: 'move', move }] : []
+  }
+
+  private wheel(e: WheelInput): Action[] {
+    if (e.ctrl) {
+      this.burst = undefined
+      if (e.dy === 0) return []
+      // Wheel down zooms out, as in browsers
+      return [{ kind: 'zoomAt', factor: WHEEL_ZOOM ** (-e.dy / 100), x: e.x, y: e.y }]
+    }
+    const vertical = Math.abs(e.dy) >= Math.abs(e.dx)
+    const delta = vertical ? e.dy : e.dx
+    if (delta === 0) return []
+    const zoomed = this.context.zoomed()
+    if (!this.burst || e.t - this.burst.last > WHEEL_GAP_MS) {
+      this.burst = { last: e.t, atEdge: !zoomed || this.wheelAtEdge(vertical, delta), sum: 0 }
+    }
+    const b = this.burst
+    b.last = e.t
+    // Scrolling down shows more of the bottom: the page moves up
+    if (!b.atEdge) return [{ kind: 'drag', dx: -e.dx, dy: -e.dy }]
+    b.sum += delta
+    if (Math.abs(b.sum) < WHEEL_STEP) return []
+    const move = b.sum > 0 ? 'next' : 'previous'
+    b.sum = 0
+    return [{ kind: 'move', move }]
+  }
+
+  /** Whether a zoomed page already shows its edge in the wheel's direction. */
+  private wheelAtEdge(vertical: boolean, delta: number) {
+    const edges = this.context.edges()
+    if (vertical) return delta > 0 ? edges.bottom : edges.top
+    return delta > 0 ? edges.right : edges.left
   }
 
   private pointer(e: PointerInput): Action[] {

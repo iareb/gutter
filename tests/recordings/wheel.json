@@ -1,5 +1,5 @@
 {
-  "description": "Three mouse wheel notches on WebView2: no action until step 2.5.",
+  "description": "Three mouse wheel notches on WebView2, on a fitted page: one page each.",
   "recording": {
     "version": 1,
     "device": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
@@ -38,5 +38,18 @@
       }
     ]
   },
-  "expected": []
+  "expected": [
+    {
+      "kind": "move",
+      "move": "next"
+    },
+    {
+      "kind": "move",
+      "move": "next"
+    },
+    {
+      "kind": "move",
+      "move": "next"
+    }
+  ]
 }

@@ -8,6 +8,7 @@
   // the other pages stay readable.
   import { untrack } from 'svelte'
   import { decode } from './core/decode'
+  import type { Edges } from './core/gestures'
   import { fitPage, type Size } from './core/fit'
   import { fromPointer, fromWheel, type InputEvent } from './core/input'
   import {
@@ -144,11 +145,16 @@
   }
 
   /** Which sides of the page are on screen: past them it cannot be dragged. */
-  export function edges() {
-    if (!fit || !room) return { left: true, right: true }
+  export function edges(): Edges {
+    if (!fit || !room) return { left: true, right: true, top: true, bottom: true }
     const shown = shownSize(fit, view.zoom)
     const r = visibleRect(view, shown, room)
-    return { left: r.x === 0, right: r.x + r.width === shown.width }
+    return {
+      left: r.x === 0,
+      right: r.x + r.width === shown.width,
+      top: r.y === 0,
+      bottom: r.y + r.height === shown.height,
+    }
   }
 
   export const zoomed = () => view.zoom > 1
@@ -273,6 +279,17 @@
 
   $effect(() => () => clearTimeout(leaveTimer))
 
+  // The wheel belongs to the gesture engine: not passive, so the webview neither
+  // scrolls nor zooms itself (Ctrl+wheel, and a trackpad pinch on Chromium)
+  $effect(() => {
+    const wheel = (event: WheelEvent) => {
+      event.preventDefault()
+      oninput(fromWheel(event, box.getBoundingClientRect(), 0))
+    }
+    box.addEventListener('wheel', wheel, { passive: false })
+    return () => box.removeEventListener('wheel', wheel)
+  })
+
   async function convert(data: PageData) {
     const converted = await loadConvertedPage(volume, page)
     data.bytes = converted.bytes
@@ -342,7 +359,6 @@
   onpointermove={pointer}
   onpointerup={pointer}
   onpointercancel={pointer}
-  onwheel={(event) => oninput(fromWheel(event, box.getBoundingClientRect(), 0))}
 >
   <canvas
     bind:this={canvas}

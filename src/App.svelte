@@ -19,7 +19,7 @@
   const engine = new GestureEngine({
     width: () => viewer?.area().width ?? 0,
     zoomed: () => viewer?.zoomed() ?? false,
-    edges: () => viewer?.edges() ?? { left: true, right: true },
+    edges: () => viewer?.edges() ?? { left: true, right: true, top: true, bottom: true },
   })
 
   async function pick() {

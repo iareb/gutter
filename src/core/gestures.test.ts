@@ -4,15 +4,21 @@ import {
   GestureEngine,
   SWIPE_DISTANCE,
   TURN_LOCK_MS,
+  WHEEL_GAP_MS,
   type Action,
-  type Context,
+  type Edges,
 } from './gestures'
 import { parseRecording, type InputEvent } from './input'
 
 const WIDTH = 400
-type Edges = ReturnType<Context['edges']>
-const engine = (zoomed = false, edges: Edges = { left: false, right: false }) =>
-  new GestureEngine({ width: () => WIDTH, zoomed: () => zoomed, edges: () => edges })
+const NO_EDGES: Edges = { left: false, right: false, top: false, bottom: false }
+const ALL_EDGES: Edges = { left: true, right: true, top: true, bottom: true }
+const engine = (zoomed = false, edges: Partial<Edges> = {}) =>
+  new GestureEngine({
+    width: () => WIDTH,
+    zoomed: () => zoomed,
+    edges: () => ({ ...NO_EDGES, ...edges }),
+  })
 const run = (e: GestureEngine, events: InputEvent[]): Action[] => events.flatMap((x) => e.feed(x))
 /** The actions without the page following the finger, which come on every move. */
 const discrete = (actions: Action[]) => actions.filter((a) => a.kind !== 'follow')
@@ -139,16 +145,12 @@ describe('dragging a zoomed page', () => {
 describe('swiping a zoomed page at its edge', () => {
   it('turns the page when pulled past the edge on screen', () => {
     // Right edge on screen: pulling the page to the left brings the next page
-    expect(swipe(engine(true, { left: false, right: true }), drag(350, 150, 150))).toEqual([
-      turnNext,
-    ])
-    expect(swipe(engine(true, { left: true, right: false }), drag(50, 250, 150))).toEqual([
-      turnPrevious,
-    ])
+    expect(swipe(engine(true, { right: true }), drag(350, 150, 150))).toEqual([turnNext])
+    expect(swipe(engine(true, { left: true }), drag(50, 250, 150))).toEqual([turnPrevious])
   })
 
   it('pans instead when pulled away from that edge, or mostly up and down', () => {
-    const atRight = { left: false, right: true }
+    const atRight = { right: true }
     const back = run(engine(true, atRight), drag(50, 250, 150))
     expect(back.every((a) => a.kind === 'drag')).toBe(true)
     const down = run(engine(true, atRight), drag(300, 250, 150, 0, 100, 400))
@@ -156,7 +158,7 @@ describe('swiping a zoomed page at its edge', () => {
   })
 
   it('never happens with a mouse: it keeps dragging', () => {
-    const actions = run(engine(true, { left: true, right: true }), [
+    const actions = run(engine(true, ALL_EDGES), [
       mouse('down', 0, 350),
       mouse('move', 50, 150),
       mouse('up', 100, 150),
@@ -247,6 +249,64 @@ describe('pinch', () => {
   })
 })
 
+describe('wheel', () => {
+  const wheel = (t: number, dy: number, extra: Partial<{ dx: number; ctrl: boolean }> = {}) =>
+    ({ kind: 'wheel', t, dx: 0, dy, ctrl: false, x: 100, y: 200, ...extra }) as const
+  const notches = (n: number, dy = 100, t0 = 0, every = 120) =>
+    Array.from({ length: n }, (_, i) => wheel(t0 + i * every, dy))
+
+  it('turns one page per notch on a fitted page', () => {
+    expect(run(engine(), notches(3))).toEqual([next, next, next])
+    expect(run(engine(), notches(2, -100))).toEqual([previous, previous])
+  })
+
+  it('adds up small steps until they make a notch', () => {
+    const smooth = Array.from({ length: 10 }, (_, i) => wheel(i * 16, 10))
+    expect(run(engine(), smooth)).toEqual([next, next])
+  })
+
+  it('scrolls a zoomed page instead', () => {
+    const actions = run(engine(true), notches(2))
+    expect(actions).toHaveLength(2)
+    // Scrolling down shows more of the bottom: the page moves up
+    for (const a of actions) expect(a).toMatchObject({ kind: 'drag', dy: -100 })
+  })
+
+  it('turns a zoomed page only in a new burst that starts at its edge', () => {
+    let atBottom = false
+    const e = new GestureEngine({
+      width: () => WIDTH,
+      zoomed: () => true,
+      edges: () => ({ ...NO_EDGES, bottom: atBottom }),
+    })
+    // Scrolling down reaches the bottom in the middle of a burst: no page turn
+    expect(run(e, notches(1)).map((a) => a.kind)).toEqual(['drag'])
+    atBottom = true
+    expect(run(e, notches(2, 100, 120)).map((a) => a.kind)).toEqual(['drag', 'drag'])
+    // After a pause, the next notch turns the page
+    expect(run(e, notches(1, 100, 240 + WHEEL_GAP_MS + 10))).toEqual([next])
+    // Scrolling back up from the bottom edge scrolls
+    expect(run(e, notches(1, -100, 2000)).map((a) => a.kind)).toEqual(['drag'])
+  })
+
+  it('zooms on the cursor with Ctrl: down zooms out, up zooms in', () => {
+    const [out] = run(engine(), [wheel(0, 100, { ctrl: true })])
+    const [inward] = run(engine(), [wheel(0, -100, { ctrl: true })])
+    expect(out).toMatchObject({ kind: 'zoomAt', x: 100, y: 200 })
+    expect(out.kind === 'zoomAt' && out.factor).toBeCloseTo(0.8)
+    expect(inward.kind === 'zoomAt' && inward.factor).toBeCloseTo(1.25)
+  })
+})
+
+describe('double click', () => {
+  it('zooms like a double tap', () => {
+    const click = (t: number) => [mouse('down', t, 200), mouse('up', t + 60, 200)]
+    expect(run(engine(), [...click(0), ...click(150)])).toEqual([
+      { kind: 'zoomAt', factor: 2, x: 200, y: 300 },
+    ])
+  })
+})
+
 describe('keys', () => {
   it('turn pages on a fitted page', () => {
     expect(run(engine(), [key('ArrowRight'), key(' ', 0, true), key('End')])).toEqual([
@@ -288,7 +348,7 @@ describe('recordings', () => {
       const e = new GestureEngine({
         width: () => r.area.width,
         zoomed: () => false,
-        edges: () => ({ left: true, right: true }),
+        edges: () => ALL_EDGES,
       })
       // `expected` lists the discrete actions: following the finger is left out
       expect(discrete(run(e, r.events)).filter((a) => a.kind !== 'settle')).toEqual(expected)
