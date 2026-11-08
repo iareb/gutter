@@ -59,5 +59,38 @@ export function zoomView(view: View, factor: number): View {
   return zoom === 1 ? FIT_VIEW : { ...view, zoom }
 }
 
+/**
+ * Zooms by `factor` keeping the page point under `anchor` (physical pixels from
+ * the top left of the viewport) where it is: the zoom follows the fingers or
+ * the cursor. `fit` is the page size at zoom 1.
+ */
+export function zoomAround(
+  view: View,
+  factor: number,
+  anchor: { x: number; y: number },
+  fit: Size,
+  viewport: Size,
+): View {
+  const zoom = Math.min(Math.max(view.zoom * factor, 1), MAX_ZOOM)
+  if (zoom === 1) return FIT_VIEW
+  const before = shownSize(fit, view.zoom)
+  const after = shownSize(fit, zoom)
+  const axis = (center: number, a: number, page: number, next: number, room: number) => {
+    // Where the page starts on screen now, and which page fraction is under the anchor
+    const start = page <= room ? (room - page) / 2 : room / 2 - center * page
+    const fraction = (a - start) / page
+    return (room / 2 - a + fraction * next) / next
+  }
+  return clampView(
+    {
+      zoom,
+      cx: axis(view.cx, anchor.x, before.width, after.width, viewport.width),
+      cy: axis(view.cy, anchor.y, before.height, after.height, viewport.height),
+    },
+    after,
+    viewport,
+  )
+}
+
 export const sameView = (a: View, b: View) =>
   a.zoom === b.zoom && Math.abs(a.cx - b.cx) < 1e-9 && Math.abs(a.cy - b.cy) < 1e-9

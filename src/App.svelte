@@ -2,7 +2,7 @@
   import { invoke } from '@tauri-apps/api/core'
   import { open } from '@tauri-apps/plugin-dialog'
   import { fromKey, type InputEvent, type Recording } from './core/input'
-  import { Interpreter, type Action } from './core/interpret'
+  import { GestureEngine, type Action } from './core/gestures'
   import { movePage, type Move } from './core/navigation'
   import { fileName, openVolume, type Volume } from './core/volume'
   import PageView from './PageView.svelte'
@@ -15,8 +15,8 @@
   let page = $state(0)
   let viewer = $state<PageView>()
 
-  // All input goes through the interpreter as normalized events
-  const interpreter = new Interpreter({
+  // All input goes through the gesture engine as normalized events
+  const engine = new GestureEngine({
     width: () => viewer?.area().width ?? 0,
     zoomed: () => viewer?.zoomed() ?? false,
   })
@@ -56,13 +56,17 @@
         return
       case 'zoom':
         return viewer?.zoomBy(action.how)
+      case 'drag':
+        return viewer?.drag(action.dx, action.dy)
+      case 'zoomAt':
+        return viewer?.zoomAt(action.factor, action.x, action.y)
     }
   }
 
-  /** Feeds one event to the interpreter. Returns whether it did something. */
+  /** Feeds one event to the gesture engine. Returns whether it did something. */
   function input(event: InputEvent) {
     recorded?.push(event)
-    const actions = interpreter.feed(event)
+    const actions = engine.feed(event)
     actions.forEach(apply)
     return actions.length > 0
   }

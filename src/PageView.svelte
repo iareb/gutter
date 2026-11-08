@@ -17,6 +17,7 @@
     sameView,
     shownSize,
     visibleRect,
+    zoomAround,
     zoomView,
     type View,
   } from './core/view'
@@ -85,6 +86,18 @@
     if (sameView(next, view)) return false
     view = next
     return true
+  }
+
+  /** Drags a zoomed page by CSS pixels: the page follows the pointer. */
+  export function drag(dx: number, dy: number) {
+    if (!fit || !room || view.zoom === 1) return
+    view = panView(view, -dx * dpr, -dy * dpr, shownSize(fit, view.zoom), room)
+  }
+
+  /** Zooms keeping the page point at (x, y), CSS pixels in the page area, still. */
+  export function zoomAt(factor: number, x: number, y: number) {
+    if (!fit || !room) return
+    view = zoomAround(view, factor, { x: x * dpr, y: y * dpr }, fit, room)
   }
 
   export const zoomed = () => view.zoom > 1
@@ -170,12 +183,21 @@
       width: Math.max(Math.min(shown.width, original.width), 1),
       height: Math.max(Math.min(shown.height, original.height), 1),
     }
+    const pageData = data
     let cancelled = false
-    decodePage(data, target).then(
-      (bitmap) => (cancelled ? bitmap.close() : setDecoded(bitmap)),
-      (e) => !cancelled && fail(e),
-    )
-    return () => (cancelled = true)
+    // The first decode of a page starts at once. A new zoom waits until it stops
+    // changing: during a pinch the page is scaled from the decode it already has
+    const delay = untrack(() => decoded) ? 150 : 0
+    const timer = setTimeout(() => {
+      decodePage(pageData, target).then(
+        (bitmap) => (cancelled ? bitmap.close() : setDecoded(bitmap)),
+        (e) => !cancelled && fail(e),
+      )
+    }, delay)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   })
 
   // Keep the view inside the page when the window changes
@@ -270,6 +292,8 @@
 <style>
   .box {
     position: relative;
+    /* Every touch on the page goes to the gesture engine: no browser panning or zooming */
+    touch-action: none;
     flex: 1;
     min-height: 0;
     overflow: hidden;

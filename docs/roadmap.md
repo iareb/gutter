@@ -20,7 +20,7 @@ Spikes (M0.5) live on throwaway branches named `spike/<name>` that are never mer
 | M0 — Skeleton | **Done** (Nov 1, 2026) |
 | M0.5 — Risk check | **Done** (Nov 2), except trackpad pinch on Windows: no laptop with a trackpad yet |
 | M1 — Basic viewer | **Done** (Nov 7): [checklist](checklists/m1.md) passed on Windows, Linux and Android |
-| M2 — Gesture engine | In progress: 2.1 and 2.2 done |
+| M2 — Gesture engine | In progress: 2.1 to 2.3 done |
 
 Estimates were revised at the end of M1, see the [design document](design.md#roadmap-and-open-questions).
 
@@ -78,7 +78,7 @@ Zoom, pan and page turns by touch, mouse, trackpad and keyboard, with the rule f
 | --- | --- | --- |
 | 2.1 Zoomed rendering | Viewer state: page, zoom, offset. A zoomed page is decoded again at the zoom's physical resolution (never above the original) and only the visible part is drawn, still 1:1; the offset is clamped so the page never leaves the screen. Driven by temporary keys (+, −, arrows) until the gestures exist | **Done:** at every zoom level the visible part is identical to a reference decode, on WebView2 and WebKitGTK; + − 0 zoom, arrows and Page Up/Down pan and turn at the edge |
 | 2.2 Events, recording, replay | Normalized input events (pointer, wheel, key, pinch) with timestamps; adapters from the webview's events; a development-only recorder that saves a gesture to a file; Vitest replays recordings into the engine | **Done:** recordings of mouse, touch, keys and wheel in `tests/recordings/`, replayed by `pnpm test`; the recorder is a "● Rec" button in development builds |
-| 2.3 State machine | States idle, pan, pinch, page change in progress; during a page change other input is ignored; each gesture yields exactly one action. Pure TypeScript, tested with synthetic and recorded sequences | `pnpm test`: a swipe that turns a page cannot also pan, and vice versa |
+| 2.3 State machine | States idle, pan, pinch, page change in progress; during a page change other input is ignored; each gesture yields exactly one action. Pure TypeScript, tested with synthetic and recorded sequences | **Done:** `src/core/gestures.ts`, 20 tests; wired in with first-guess thresholds: swipe to turn, drag a zoomed page (finger or mouse), pinch to zoom around the fingers, one page per flick. Tuning, the page following the finger and double tap are step 2.4 |
 | 2.4 Touch | Pinch centered between the fingers; pan when zoomed; swipe turns the page only past a distance **and** a velocity threshold, otherwise snaps back, with the page following the finger and a 150–250 ms slide; double tap: 2× on the tapped area, then back to fit; at the edge of a zoomed page a new swipe turns the page. Tuned on the phone | On Android: 50 swipes on `basic.cbz` without a double page turn; zoom stays under the fingers |
 | 2.5 Mouse and keyboard | Wheel: one notch, one page, or vertical pan when zoomed; Ctrl+wheel: zoom on the cursor; double click like double tap; arrows and Page Up/Down pan a zoomed page, then turn at the edge | On Windows and Linux: read `basic.cbz` with the wheel, zoom on a detail with Ctrl+wheel |
 | 2.6 Trackpad | Two-finger scroll accumulates and turns the page past a threshold, then input is locked until the inertia dies out, telling inertia apart by the trend of the deltas; pinch as Ctrl+wheel on Chromium, from Rust through the GTK handler on Linux (from the `trackpad-pinch` spike) | On the Linux laptop: 50 flicks on `basic.cbz`, each turning exactly one page; pinch zooms without the whole window zooming |

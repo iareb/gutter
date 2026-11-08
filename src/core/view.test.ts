@@ -7,6 +7,7 @@ import {
   sameView,
   shownSize,
   visibleRect,
+  zoomAround,
   zoomView,
 } from './view'
 
@@ -93,5 +94,44 @@ describe('zoomView', () => {
   it('stays between fit and the maximum', () => {
     expect(zoomView({ zoom: 6, cx: 0.5, cy: 0.5 }, 2).zoom).toBe(MAX_ZOOM)
     expect(zoomView({ zoom: 1.2, cx: 0.3, cy: 0.7 }, 0.5)).toEqual(FIT_VIEW)
+  })
+})
+
+describe('zoomAround', () => {
+  const room = { width: 1000, height: 900 }
+  // Which page fraction is shown at screen point a, for a view
+  const under = (view: { zoom: number; cx: number; cy: number }, a: { x: number; y: number }) => {
+    const shown = shownSize(fit, view.zoom)
+    const start = (center: number, page: number, length: number) =>
+      page <= length ? (length - page) / 2 : length / 2 - center * page
+    return {
+      x: (a.x - start(view.cx, shown.width, room.width)) / shown.width,
+      y: (a.y - start(view.cy, shown.height, room.height)) / shown.height,
+    }
+  }
+
+  it('keeps the page point under the anchor still', () => {
+    const start = { zoom: 2, cx: 0.5, cy: 0.5 }
+    const anchor = { x: 700, y: 300 }
+    const before = under(start, anchor)
+    const after = under(zoomAround(start, 1.5, anchor, fit, room), anchor)
+    expect(after.x).toBeCloseTo(before.x)
+    expect(after.y).toBeCloseTo(before.y)
+  })
+
+  it('works from the fitted page too', () => {
+    const anchor = { x: 500, y: 200 }
+    const before = under(FIT_VIEW, anchor)
+    const after = under(zoomAround(FIT_VIEW, 3, anchor, fit, room), anchor)
+    expect(after.y).toBeCloseTo(before.y)
+    expect(after.x).toBeCloseTo(before.x)
+  })
+
+  it('stays inside the page near the edges, and between fit and the maximum', () => {
+    const view = zoomAround({ zoom: 2, cx: 0.5, cy: 0.5 }, 1.5, { x: 0, y: 0 }, fit, room)
+    const shown = shownSize(fit, view.zoom)
+    expect(visibleRect(view, shown, room).x).toBeGreaterThanOrEqual(0)
+    expect(zoomAround(FIT_VIEW, 0.5, { x: 10, y: 10 }, fit, room)).toEqual(FIT_VIEW)
+    expect(zoomAround(FIT_VIEW, 100, { x: 10, y: 10 }, fit, room).zoom).toBe(MAX_ZOOM)
   })
 })
