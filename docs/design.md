@@ -250,10 +250,11 @@ We start with the viewer, because that's where all the problems of existing read
    Every "no" leads to fixing this document before M1.
 3. **M1 — Basic viewer.** Open CBZ, single page, high-quality rendering, keyboard and tap navigation.
 4. **M2 — Gesture engine.** Zoom, pan, swipe with thresholds, trackpad inertia handling. Testing on Android.
-5. **M3 — Reading modes.** Double page, vertical scroll, manga direction, preloading and memory budget.
-6. **M4 — Library.** Cover grid, thumbnails, reading position saved in SQLite.
-7. **M5 — Formats and release.** CBR, image folders, first public 0.1 release on GitHub.
-8. **After 0.1.** PDF, CB7, ComicInfo.xml, iOS and macOS builds, F-Droid.
+5. **M2.5 — CBR.** Moved up from M5. A spike first to choose the RAR library, then reading CBR files. It comes before M3 because preloading and the memory budget depend on what a page costs in each format: in a solid RAR archive a page can only be read after decompressing the ones before it.
+6. **M3 — Reading modes.** Double page, vertical scroll, manga direction, preloading and memory budget.
+7. **M4 — Library.** Cover grid, thumbnails, reading position saved in SQLite.
+8. **M5 — Formats and release.** Image folders, first public 0.1 release on GitHub.
+9. **After 0.1.** PDF, CB7, ComicInfo.xml, iOS and macOS builds, F-Droid.
 
 **Rough estimates.** Estimates assume development by coding agents, with one person leading, testing and validating about 10 hours a week. The bottleneck is not writing code but testing it on devices and tuning gestures.
 
@@ -262,9 +263,10 @@ We start with the viewer, because that's where all the problems of existing read
 | M0 + M0.5 | 1–2 weeks | **3 days** (Oct 31 – Nov 2, 2026) |
 | M1 | 1–2 weeks | **6 days** (Nov 2 – Nov 7) |
 | M2 | 3–5 weeks (biggest risk: tuning on real devices) | 2–3 weeks |
+| M2.5 | — (part of M5) | about 1 week, spike included |
 | M3 | 2–3 weeks | 2–3 weeks |
 | M4 | 1–2 weeks | 1 week |
-| M5 | 1–2 weeks | 1–2 weeks |
+| M5 | 1–2 weeks | 1 week (CBR moved to M2.5) |
 | **Total up to 0.1** (Windows, Linux, Android) | **about 3–4 months** | **about 7–10 weeks from now**: release 0.1 around January 2027 |
 
 **Revision at the end of M1.** M0 to M1 took about 9 days instead of 2–4 weeks, with more than the assumed 10 hours a week of validation. Writing code was not the bottleneck; finding problems on real devices was. Every step of M1 hit something only a device showed: moire at the phone's real downscale ratio, fractional pixel densities resampling the page, Vite reloading the page on Android, quick taps lost to double-tap detection. So the revision keeps the device-heavy milestones wide:
@@ -272,7 +274,7 @@ We start with the viewer, because that's where all the problems of existing read
 - **M2** shrinks less than the pace suggests: gestures must be tuned by hand on each device, and Windows trackpad pinch cannot be tested yet (no laptop with a trackpad).
 - **M3** stays as it was: preloading and the memory budget start from measurements that are already over target (about 430 MB of webview memory on Windows after the M1 checklist, against 300 MB), and a page change on the phone takes 300–400 ms.
 - **M4** shrinks: a cover grid and SQLite are well-trodden ground.
-- **M5** stays: the CBR library choice (`unrar` or libarchive) and building it for Android are still open.
+- **M5** stays: the CBR library choice (`unrar` or libarchive) and building it for Android are still open. *Update during M2:* CBR moves to its own milestone, M2.5, before M3, with a spike first; M5 keeps image folders and the release. The order changes, not the total.
 
 macOS and iOS add 1–3 weeks after 0.1. Next revision at the end of M3.
 
@@ -281,6 +283,6 @@ Open questions:
 - [x] Project name: **gutter**
 - [x] License: **MIT**
 - [x] Rendering on `<canvas>` or `<img>`: **`<canvas>` with a 2D context** ([`canvas-vs-img` benchmark](spikes/canvas-vs-img.md)): an `<img>` either lets the browser downscale, leaving moire, or needs the page re-encoded as PNG, up to 25 times slower
-- [ ] CBR: `unrar` crate or libarchive. With MIT, GPL compatibility is no longer a concern, but the UnRAR license is not an open-source license: F-Droid treats apps bundling it as non-free. libarchive (BSD) avoids this but is harder to build for Android
+- [ ] CBR (decided by the M2.5 spike): `unrar` crate or libarchive. With MIT, GPL compatibility is no longer a concern, but the UnRAR license is not an open-source license: F-Droid treats apps bundling it as non-free. libarchive (BSD) avoids this but is harder to build for Android
 - [ ] Default memory budget on mobile: set from the M0.5 and M3 measurements
 - [ ] Apple Developer account for iOS: yes or no
