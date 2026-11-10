@@ -2,7 +2,7 @@
 
 A fast, open-source comic book reader for desktop and mobile that never degrades your pages.
 
-> **Status:** early development. The basic viewer works on Windows, Linux and Android, but there is no release to install yet: [build it from source](docs/setup.md). Progress is tracked in the [roadmap](docs/roadmap.md).
+> **Status:** early development. The viewer, with zoom and gestures, works on Windows, Linux and Android, but there is no release to install yet: [build it from source](docs/setup.md). Progress is tracked in the [roadmap](docs/roadmap.md).
 
 ## Why
 
@@ -20,6 +20,8 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 - One page at a time, at the screen's physical resolution: pages are downscaled in steps so fine patterns and screentones don't turn into moire, and drawn one image pixel per screen pixel
 - Pages redrawn sharp when the window is resized or the phone rotated
 - Turn pages with the arrow keys, Page Up/Down, Space, Home and End, or by tapping or clicking the left and right side of the page
+- Zoom up to 8× and pan: pinch, double tap or double click, Ctrl+wheel, keys `+` `-` `0`; the page is redrawn sharp at every zoom
+- Swipe to turn the page (it follows your finger), one page per mouse notch and one per trackpad flick, even with its inertia; a tap in the middle shows and hides the controls
 - Pages in natural order (`page 2` before `page 10`), junk files skipped
 - JPEG, PNG, WebP and AVIF pages; AVIF is decoded in Rust where the system webview can't (Linux)
 - Clear messages for damaged files and pages, while the rest of the comic stays readable

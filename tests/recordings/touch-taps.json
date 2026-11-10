@@ -1,5 +1,5 @@
 {
-  "description": "Touch on WebView2 with touch emulation: tap right, right, left, middle; two fingers down together; a swipe from right to left. Only the three taps on the sides turn pages (swipes come in step 2.4).",
+  "description": "Touch on WebView2 with touch emulation: tap right, right, left, middle; two fingers down together; a swipe from right to left. The three taps on the sides turn pages and the one in the middle asks for the controls. The swipe is cancelled by the system and does nothing.",
   "recording": {
     "version": 1,
     "device": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
@@ -158,6 +158,9 @@
     {
       "kind": "move",
       "move": "previous"
+    },
+    {
+      "kind": "controls"
     }
   ]
 }

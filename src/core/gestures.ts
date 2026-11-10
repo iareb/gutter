@@ -17,7 +17,9 @@
 // A double tap zooms 2x on the tapped point, and on a zoomed page goes back to
 // fit. On a fitted page only the middle of the screen takes double taps: taps
 // on the sides turn the page at once, without waiting to see if a second tap
-// comes.
+// comes. A tap in the middle (the half between the side zones), on a fitted or
+// a zoomed page, asks to show or hide the controls: the app waits out the
+// double tap time before doing it, so a double tap does not flash them.
 //
 // The wheel turns one page per notch on a fitted page. On a zoomed page it
 // scrolls; like the swipe, it turns the page only in a new burst of wheel
@@ -49,6 +51,8 @@ export type Action =
   | { kind: 'settle' }
   /** A swipe that turns the page: slide it out of the screen, then show the new one. */
   | { kind: 'turn'; move: 'next' | 'previous' }
+  /** A tap in the middle: show or hide the controls, unless a double tap follows at once. */
+  | { kind: 'controls' }
 
 /** A tap moves less than this, in CSS pixels, and lasts less than TAP_MS. */
 export const TAP_SLOP = 10
@@ -384,7 +388,8 @@ export class GestureEngine {
       if (double) return [{ kind: 'zoomAt', factor: DOUBLE_TAP_ZOOM, x: p.x, y: p.y }]
     }
     this.lastTap = { t, p }
-    return []
+    // The sides of a zoomed page do nothing; the middle always has the controls
+    return tapMove(p.x, this.context.width()) ? [] : [{ kind: 'controls' }]
   }
 
   /** A second finger: whatever the first was doing, this is now a pinch. */
