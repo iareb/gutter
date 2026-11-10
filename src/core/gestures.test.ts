@@ -341,6 +341,11 @@ describe('wheel', () => {
     expect(run(engine(), fast)).toEqual([next, next, next, next])
   })
 
+  it('turns a page for every notch of a wheel spun fast, steps 10 ms apart', () => {
+    const spun = Array.from({ length: 8 }, (_, i) => wheel(i * 10, 100))
+    expect(run(engine(), spun)).toEqual(Array(8).fill(next))
+  })
+
   it('scrolls a zoomed page instead', () => {
     const actions = run(engine(true), notches(2))
     expect(actions).toHaveLength(2)

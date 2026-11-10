@@ -99,6 +99,8 @@ type Burst = {
   turned: boolean
   /** It had a step smaller than a notch: a trackpad, whose big steps are never notches. */
   smooth: boolean
+  /** The size of the previous step: a mouse sends the same one every notch. */
+  lastSize: number
   /** The biggest step so far; once steps fall well below it the flick is dying out. */
   peak: number
   falling: boolean
@@ -192,6 +194,7 @@ export class GestureEngine {
         sum: 0,
         turned: false,
         smooth: false,
+        lastSize: 0,
         peak: 0,
         falling: false,
         trough: Infinity,
@@ -200,7 +203,10 @@ export class GestureEngine {
     // A stall (a page being decoded) can make a trackpad's big steps arrive late:
     // only a stream of big steps and nothing else is a mouse
     if (size < WHEEL_STEP) b.smooth = true
-    const notch = size >= WHEEL_STEP && gap >= NOTCH_GAP_MS && !b.smooth
+    // A mouse notch is a big step after a pause, or the same big step again when the
+    // wheel is spun: a trackpad's big steps vary
+    const notch = size >= WHEEL_STEP && !b.smooth && (gap >= NOTCH_GAP_MS || size === b.lastSize)
+    b.lastSize = size
     b.last = e.t
     if (!notch) {
       if (!b.falling) {
