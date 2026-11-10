@@ -1266,6 +1266,7 @@ name = "gutter"
 version = "0.1.0"
 dependencies = [
  "avif-decode",
+ "gtk",
  "imagesize",
  "png",
  "serde",

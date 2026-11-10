@@ -260,9 +260,69 @@ describe('wheel', () => {
     expect(run(engine(), notches(2, -100))).toEqual([previous, previous])
   })
 
-  it('adds up small steps until they make a notch', () => {
+  it('turns once for a small steady scroll that adds up to a page', () => {
     const smooth = Array.from({ length: 10 }, (_, i) => wheel(i * 16, 10))
-    expect(run(engine(), smooth)).toEqual([next, next])
+    expect(run(engine(), smooth)).toEqual([next])
+  })
+
+  // A two-finger flick on a trackpad: steps grow, peak, then decay as inertia, 16 ms apart
+  const flick = (t0: number, sign = 1, peak = 84) => {
+    const steps: number[] = [2, 6, 14, 30, 50, peak]
+    for (let d = peak * 0.92; d > 0.4; d *= 0.92) steps.push(d)
+    return steps.map((d, i) => wheel(t0 + i * 16, sign * d))
+  }
+
+  it('turns exactly one page per trackpad flick, inertia included', () => {
+    const events = flick(0)
+    expect(events.length).toBeGreaterThan(40)
+    expect(run(engine(), events)).toEqual([next])
+    expect(run(engine(), flick(0, -1))).toEqual([previous])
+  })
+
+  it('turns one page per flick when flicks are a pause apart', () => {
+    const e = engine()
+    expect(run(e, [...flick(0), ...flick(2000)])).toEqual([next, next])
+  })
+
+  it('takes a new flick during the inertia of the last one', () => {
+    const first = flick(0)
+    const t = first[30].t // well into the tail
+    const second = flick(t + 16)
+    const events = [...first.slice(0, 31), ...second]
+    expect(run(engine(), events)).toEqual([next, next])
+  })
+
+  it('takes a flick the other way during the inertia as a page back', () => {
+    const first = flick(0)
+    const second = flick(first[25].t + 16, -1)
+    expect(run(engine(), [...first.slice(0, 26), ...second])).toEqual([next, previous])
+  })
+
+  it('does not turn for a short, slow scroll', () => {
+    const slow = Array.from({ length: 20 }, (_, i) => wheel(i * 16, 1.5))
+    expect(run(engine(), slow)).toEqual([])
+  })
+
+  it('does not take the noise at the end of inertia for a new flick', () => {
+    const events = flick(0)
+    const end = events.at(-1)!.t
+    const noise = Array.from({ length: 30 }, (_, i) => wheel(end + (i + 1) * 16, i % 2 ? 0.4 : 3))
+    expect(run(engine(), [...events, ...noise])).toEqual([next])
+  })
+
+  it('keeps a flick to one page when a stall delays its big steps', () => {
+    const events = flick(0).map((e, i) => (i >= 6 ? { ...e, t: e.t + 80 } : e))
+    expect(run(engine(), events)).toEqual([next])
+  })
+
+  it('keeps a flick that starts with a big step to one page', () => {
+    const events = [60, 84, 77, 71, 65, 55, 40, 30, 20, 12, 6, 3, 1].map((d, i) => wheel(i * 16, d))
+    expect(run(engine(), events)).toEqual([next])
+  })
+
+  it('still turns one page per mouse notch, however fast they come', () => {
+    const fast = [0, 60, 120, 180].map((t) => wheel(t, 100))
+    expect(run(engine(), fast)).toEqual([next, next, next, next])
   })
 
   it('scrolls a zoomed page instead', () => {
@@ -289,12 +349,52 @@ describe('wheel', () => {
     expect(run(e, notches(1, -100, 2000)).map((a) => a.kind)).toEqual(['drag'])
   })
 
+  it('turns a zoomed page once for a flick that starts at its edge', () => {
+    const e = engine(true, { bottom: true })
+    expect(run(e, flick(0)).filter((a) => a.kind === 'move')).toEqual([next])
+  })
+
+  it('treats small Ctrl steps as a pinch, zooming smoothly', () => {
+    const [a] = run(engine(), [wheel(0, -10, { ctrl: true })])
+    expect(a.kind === 'zoomAt' && a.factor).toBeCloseTo(Math.exp(0.1))
+  })
+
   it('zooms on the cursor with Ctrl: down zooms out, up zooms in', () => {
     const [out] = run(engine(), [wheel(0, 100, { ctrl: true })])
     const [inward] = run(engine(), [wheel(0, -100, { ctrl: true })])
     expect(out).toMatchObject({ kind: 'zoomAt', x: 100, y: 200 })
     expect(out.kind === 'zoomAt' && out.factor).toBeCloseTo(0.8)
     expect(inward.kind === 'zoomAt' && inward.factor).toBeCloseTo(1.25)
+  })
+})
+
+describe('native pinch', () => {
+  const pinch = (phase: 'begin' | 'update' | 'end' | 'cancel', scale: number, x = 120, y = 80) =>
+    ({ kind: 'pinch', t: 0, phase, scale, x, y }) as const
+
+  it('zooms by how much the scale changed since the last update', () => {
+    const actions = run(engine(), [
+      pinch('begin', 1),
+      pinch('update', 1.5),
+      pinch('update', 1.8, 130, 90),
+      pinch('end', 1.8),
+    ])
+    expect(actions).toEqual([
+      { kind: 'zoomAt', factor: 1.5, x: 120, y: 80 },
+      { kind: 'zoomAt', factor: 1.8 / 1.5, x: 130, y: 90 },
+    ])
+  })
+
+  it('starts from scale 1 again for the next pinch', () => {
+    const e = engine()
+    run(e, [pinch('begin', 1), pinch('update', 2), pinch('end', 2)])
+    expect(run(e, [pinch('begin', 1), pinch('update', 0.5), pinch('cancel', 0.5)])).toEqual([
+      { kind: 'zoomAt', factor: 0.5, x: 120, y: 80 },
+    ])
+  })
+
+  it('ignores updates that change nothing or are not numbers', () => {
+    expect(run(engine(), [pinch('begin', 1), pinch('update', 1), pinch('update', NaN)])).toEqual([])
   })
 })
 

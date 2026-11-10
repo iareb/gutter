@@ -2,6 +2,7 @@ use tauri::Manager;
 
 pub mod archive;
 pub mod convert;
+pub mod pinch;
 pub mod protocol;
 #[cfg(debug_assertions)]
 pub mod recording;
@@ -13,6 +14,12 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(volume::Volumes::default())
+        .setup(|_app| {
+            // WebKitGTK keeps touchpad pinch from the page: read it from the widget
+            #[cfg(target_os = "linux")]
+            pinch::forward(_app);
+            Ok(())
+        })
         .register_asynchronous_uri_scheme_protocol("page", |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             let path = request.uri().path().to_owned();

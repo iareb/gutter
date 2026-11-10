@@ -26,13 +26,24 @@ export type WheelInput = Timed & {
   y: number
 }
 
+/** A touchpad pinch reported by the platform itself, not as wheel events. */
+export type PinchInput = Timed & {
+  kind: 'pinch'
+  phase: 'begin' | 'update' | 'end' | 'cancel'
+  /** Relative to the start of the pinch: 1 at the start. */
+  scale: number
+  /** CSS pixels from the top left corner of the page area. */
+  x: number
+  y: number
+}
+
 export type KeyInput = Timed & {
   kind: 'key'
   key: string
   shift: boolean
 }
 
-export type InputEvent = PointerInput | WheelInput | KeyInput
+export type InputEvent = PointerInput | WheelInput | PinchInput | KeyInput
 
 /** A recorded gesture: the events and the screen they happened on. */
 export type Recording = {
@@ -73,6 +84,20 @@ export function fromWheel(e: WheelEvent, area: DOMRect, t0: number): WheelInput 
     ctrl: e.ctrlKey,
     x: round(e.clientX - area.left),
     y: round(e.clientY - area.top),
+  }
+}
+
+/** A pinch sent by the native side: the position is in the window, in CSS pixels. */
+export type NativePinch = { phase: PinchInput['phase']; scale: number; x: number; y: number }
+
+export function fromPinch(p: NativePinch, area: DOMRect, t: number): PinchInput {
+  return {
+    kind: 'pinch',
+    t: Math.round(t),
+    phase: p.phase,
+    scale: p.scale,
+    x: round(p.x - area.left),
+    y: round(p.y - area.top),
   }
 }
 

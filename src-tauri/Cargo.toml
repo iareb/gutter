@@ -27,9 +27,12 @@ tauri-plugin-fs = "2"
 # Reads width and height from image headers, without decoding
 imagesize = "0.15"
 
-# WebKitGTK cannot decode AVIF on Linux; the other webviews can. Pure Rust, but
-# building it on x86 needs nasm.
+# WebKitGTK cannot decode AVIF on Linux, and keeps touchpad pinch from the page;
+# the other webviews do neither. AVIF decoding is pure Rust, but building it on
+# x86 needs nasm.
 [target.'cfg(target_os = "linux")'.dependencies]
+# Touchpad pinch is read from the webview's GTK widget (the version Tauri uses)
+gtk = "0.18"
 avif-decode = { version = "3", default-features = false }
 png = "0.18"
 

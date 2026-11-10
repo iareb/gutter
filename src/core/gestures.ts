@@ -22,9 +22,16 @@
 // The wheel turns one page per notch on a fitted page. On a zoomed page it
 // scrolls; like the swipe, it turns the page only in a new burst of wheel
 // events that starts at the edge in that direction, so scrolling down to the
-// bottom of a page never runs on into the next one. Ctrl+wheel (also how
-// Chromium reports a trackpad pinch) zooms on the cursor.
-import type { InputEvent, PointerInput, WheelInput } from './input'
+// bottom of a page never runs on into the next one. Ctrl+wheel zooms on the
+// cursor: small steps are how Chromium reports a trackpad pinch.
+//
+// A trackpad's two-finger scroll is a stream of small wheel events that keeps
+// going after the fingers lift (inertia). One flick turns one page: once it
+// has, the rest of the stream is ignored until it ends (a pause) or a new flick
+// starts, which shows as the deltas growing again after they had shrunk, or
+// changing direction. A mouse notch is a single big step after a pause: each
+// one turns a page. A pinch reported natively (Linux) arrives as pinch events.
+import type { InputEvent, PinchInput, PointerInput, WheelInput } from './input'
 import { keyMove, keyPan, keyZoom, tapMove, type Move } from './navigation'
 
 export type Action =
@@ -58,6 +65,12 @@ export const TURN_LOCK_MS = 250
 export const WHEEL_STEP = 50
 /** A pause longer than this between wheel events starts a new burst. */
 export const WHEEL_GAP_MS = 300
+/** A step this big, after a short pause, is a mouse notch; a trackpad sends small ones. */
+export const NOTCH_GAP_MS = 40
+/** Deltas below this are noise when telling a new flick from the tail of the last one. */
+export const WHEEL_NOISE = 10
+/** Ctrl+wheel steps smaller than WHEEL_STEP are a pinch; this is its zoom per pixel (exp). */
+export const PINCH_WHEEL_ZOOM = 0.01
 /** Ctrl+wheel zooms by this factor every 100 CSS pixels of wheel: one notch. */
 export const WHEEL_ZOOM = 1.25
 
@@ -70,6 +83,24 @@ export type Context = {
 }
 
 export type Edges = { left: boolean; right: boolean; top: boolean; bottom: boolean }
+
+/** A stream of wheel events: a flick and its inertia, or a run of notches. */
+type Burst = {
+  last: number
+  dir: number
+  /** Whether it started where it can turn the page. */
+  atEdge: boolean
+  sum: number
+  /** It already turned a page: the rest of the stream is its inertia. */
+  turned: boolean
+  /** It had a step smaller than a notch: a trackpad, whose big steps are never notches. */
+  smooth: boolean
+  /** The biggest step so far; once steps fall well below it the flick is dying out. */
+  peak: number
+  falling: boolean
+  /** The smallest step since it started falling. */
+  trough: number
+}
 
 type Point = { x: number; y: number }
 type Pressed = {
@@ -98,7 +129,9 @@ export class GestureEngine {
   /** The last tap that could be the first half of a double tap. */
   private lastTap: { t: number; p: Point } | undefined
   /** The wheel events going on: whether they started at an edge, and how far they went. */
-  private burst: { last: number; atEdge: boolean; sum: number } | undefined
+  private burst: Burst | undefined
+  /** The scale of the native pinch going on, relative to its start. */
+  private pinchScale = 1
 
   constructor(private context: Context) {}
 
@@ -113,6 +146,8 @@ export class GestureEngine {
         return this.key(e.key, e.shift)
       case 'wheel':
         return this.wheel(e)
+      case 'pinch':
+        return this.nativePinch(e)
       case 'pointer':
         return this.pointer(e)
     }
@@ -132,24 +167,84 @@ export class GestureEngine {
       this.burst = undefined
       if (e.dy === 0) return []
       // Wheel down zooms out, as in browsers
-      return [{ kind: 'zoomAt', factor: WHEEL_ZOOM ** (-e.dy / 100), x: e.x, y: e.y }]
+      const factor =
+        Math.abs(e.dy) < WHEEL_STEP
+          ? Math.exp(-e.dy * PINCH_WHEEL_ZOOM)
+          : WHEEL_ZOOM ** (-e.dy / 100)
+      return [{ kind: 'zoomAt', factor, x: e.x, y: e.y }]
     }
     const vertical = Math.abs(e.dy) >= Math.abs(e.dx)
     const delta = vertical ? e.dy : e.dx
     if (delta === 0) return []
-    const zoomed = this.context.zoomed()
-    if (!this.burst || e.t - this.burst.last > WHEEL_GAP_MS) {
-      this.burst = { last: e.t, atEdge: !zoomed || this.wheelAtEdge(vertical, delta), sum: 0 }
+    const size = Math.abs(delta)
+
+    let b = this.burst
+    const gap = b ? e.t - b.last : Infinity
+    if (!b || gap > WHEEL_GAP_MS || this.newFlick(b, delta)) {
+      b = this.burst = {
+        last: e.t,
+        dir: Math.sign(delta),
+        atEdge: !this.context.zoomed() || this.wheelAtEdge(vertical, delta),
+        sum: 0,
+        turned: false,
+        smooth: false,
+        peak: 0,
+        falling: false,
+        trough: Infinity,
+      }
     }
-    const b = this.burst
+    // A stall (a page being decoded) can make a trackpad's big steps arrive late:
+    // only a stream of big steps and nothing else is a mouse
+    if (size < WHEEL_STEP) b.smooth = true
+    const notch = size >= WHEEL_STEP && gap >= NOTCH_GAP_MS && !b.smooth
     b.last = e.t
+    if (!notch) {
+      if (!b.falling) {
+        b.peak = Math.max(b.peak, size)
+        if (size < b.peak * 0.7) {
+          b.falling = true
+          b.trough = size
+        }
+      } else {
+        b.trough = Math.min(b.trough, size)
+      }
+    }
+
     // Scrolling down shows more of the bottom: the page moves up
     if (!b.atEdge) return [{ kind: 'drag', dx: -e.dx, dy: -e.dy }]
+    const move = delta > 0 ? 'next' : 'previous'
+    if (notch) {
+      // The rest of a fast flick that began with a big step is not a new notch
+      b.turned = true
+      return [{ kind: 'move', move }]
+    }
+    // The inertia of a flick that has turned the page
+    if (b.turned) return []
     b.sum += delta
     if (Math.abs(b.sum) < WHEEL_STEP) return []
-    const move = b.sum > 0 ? 'next' : 'previous'
-    b.sum = 0
-    return [{ kind: 'move', move }]
+    b.turned = true
+    return [{ kind: 'move', move: b.sum > 0 ? 'next' : 'previous' }]
+  }
+
+  /** Whether this step starts a new flick inside a stream: it turns around, or grows again. */
+  private newFlick(b: Burst, delta: number) {
+    const size = Math.abs(delta)
+    if (size >= WHEEL_NOISE && Math.sign(delta) !== b.dir) return true
+    return b.falling && size > b.trough * 2 + WHEEL_NOISE
+  }
+
+  /** A pinch on a touchpad reported natively: zoom by how much the scale changed. */
+  private nativePinch(e: PinchInput): Action[] {
+    this.burst = undefined
+    if (e.phase !== 'update') {
+      // Begin, end or cancel: the next update is relative to a fresh start
+      this.pinchScale = 1
+      return []
+    }
+    const factor = e.scale / this.pinchScale
+    this.pinchScale = e.scale
+    if (!Number.isFinite(factor) || factor <= 0 || factor === 1) return []
+    return [{ kind: 'zoomAt', factor, x: e.x, y: e.y }]
   }
 
   /** Whether a zoomed page already shows its edge in the wheel's direction. */

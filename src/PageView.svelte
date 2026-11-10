@@ -10,7 +10,14 @@
   import { decode } from './core/decode'
   import type { Edges } from './core/gestures'
   import { fitPage, type Size } from './core/fit'
-  import { fromPointer, fromWheel, type InputEvent } from './core/input'
+  import { listen } from '@tauri-apps/api/event'
+  import {
+    fromPinch,
+    fromPointer,
+    fromWheel,
+    type InputEvent,
+    type NativePinch,
+  } from './core/input'
   import {
     clampView,
     FIT_VIEW,
@@ -278,6 +285,19 @@
   })
 
   $effect(() => () => clearTimeout(leaveTimer))
+
+  // Touchpad pinch on Linux: WebKitGTK hides it from the page, Rust sends it
+  $effect(() => {
+    let stop: (() => void) | undefined
+    let gone = false
+    listen<NativePinch>('pinch', (event) =>
+      oninput(fromPinch(event.payload, box.getBoundingClientRect(), performance.now())),
+    ).then((unlisten) => (gone ? unlisten() : (stop = unlisten)))
+    return () => {
+      gone = true
+      stop?.()
+    }
+  })
 
   // The wheel belongs to the gesture engine: not passive, so the webview neither
   // scrolls nor zooms itself (Ctrl+wheel, and a trackpad pinch on Chromium)
