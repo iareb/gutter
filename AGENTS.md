@@ -15,7 +15,7 @@ Not in scope for 0.1: online store or downloads, cloud sync, editing files, DRM.
 | App shell | Tauri 2 |
 | UI | Svelte 5 + TypeScript, built with Vite |
 | Native side | Rust (Tauri commands): filesystem, archives, thumbnails, database |
-| Archives | `zip` crate for CBZ; `unrar` or libarchive for CBR (undecided) |
+| Archives | `zip` crate for CBZ; `rars` (pure Rust) for CBR |
 | Page delivery | Tauri custom protocol, e.g. `page://<volume>/<n>` |
 | Image decoding | `createImageBitmap` in the webview, then downscaling on a canvas in steps; Rust `avif-decode` as fallback for AVIF on Linux |
 | Persistence | SQLite via Tauri plugin |

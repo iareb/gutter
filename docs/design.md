@@ -8,7 +8,7 @@ An open-source comic book reader for desktop and mobile that shows pages at full
 
 Guiding principles:
 
-- **The page comes first.** While reading, only the comic is on screen; controls appear when needed.
+- **The page comes first.** While reading, the screen holds the comic and a slim options bar that is always there; nothing else gets in its way.
 - **Never lose quality.** No image is ever shown at a resolution lower than the screen's.
 - **Predictable gestures.** One gesture does one thing; no accidental page turns.
 - **Lightweight.** Fast startup, low memory, small installer.
@@ -53,7 +53,7 @@ Why this split: a 100 MB CBZ must never be copied whole into JavaScript. Rust op
 | UI | Svelte 5 | Compiles to JS with no heavy runtime; simple reactivity for viewer state |
 | Frontend build | Vite | Standard for Svelte, fast hot reload |
 | CBZ archives | Rust `zip` crate | Direct access to a single entry through the ZIP index, without reading the whole file |
-| CBR archives | Rust `unrar` crate (or libarchive via `compress-tools`) | Mature native library; avoids compiling to WASM. Final choice depends on licensing (see open questions) |
+| CBR archives | Rust `rars` crate (pure Rust, Apache-2.0) | Chosen by the [`cbr-library` spike](spikes/cbr-library.md): builds for Android from Windows with plain `cargo` where the UnRAR bindings fail, a license with no strings, limits for hostile files. Slower than UnRAR on solid RAR5 and cannot open truncated archives |
 | Delivering pages to the UI | Tauri custom protocol (e.g. `page://<volume>/<n>`) | The webview loads the page like a URL; no bytes serialized in IPC messages. Verified in the [`page-protocol` spike](spikes/page-protocol.md): at least as fast as IPC |
 | Image decoding | The webview's `createImageBitmap` | Native system decoding, off the main thread. Decode only: resizing happens on a canvas in steps, since neither WebKitGTK nor Chromium resizes without moire at every ratio (see the rendering pipeline) |
 | PDF (post-MVP) | pdf.js | De facto standard for PDF in the browser |
@@ -101,7 +101,7 @@ flowchart TB
   Library -- "Tauri commands" --> DB
 ```
 
-A page travels this chain: Rust opens the archive and extracts only the requested entry, serves it to the webview through the custom protocol, decoding produces the bitmap, the cache keeps it and the renderer draws it in the reader. In parallel, the gesture engine translates the reader's input into changes to the viewer state, which decides what the renderer must show. The library uses thumbnails and SQLite through Tauri commands.
+A page travels this chain (a solid RAR archive is the exception: a page can only be decoded after the ones before it, so those are read in one forward pass with a cache, see the [`cbr-library` spike](spikes/cbr-library.md)): Rust opens the archive and extracts only the requested entry, serves it to the webview through the custom protocol, decoding produces the bitmap, the cache keeps it and the renderer draws it in the reader. In parallel, the gesture engine translates the reader's input into changes to the viewer state, which decides what the renderer must show. The library uses thumbnails and SQLite through Tauri commands.
 
 ## Rendering pipeline and image quality
 
@@ -133,7 +133,7 @@ The module is a state machine with four states: **idle**, **pan**, **pinch**, **
 | Pinch | Zoom centered on the midpoint between the fingers | Same |
 | Double tap / double click | 2× zoom on the tapped area | Back to "fit to screen" |
 | Tap on the sides | Previous / next page | No action |
-| Tap in the center | Show / hide controls | Same |
+| Tap in the center | No action: the options bar is always visible | Same |
 | Two-finger trackpad scroll | Accumulates movement; changes page past a threshold, then blocks input until inertia dies out | Pan |
 | Mouse wheel | One notch = one page | Vertical pan |
 | Ctrl + wheel / trackpad pinch | Zoom centered on the cursor | Same |
@@ -149,12 +149,13 @@ Thresholds and sensitivity are configurable in the settings.
 
 ## UI/UX
 
-The app has two screens: **Library** and **Reader**. While reading, the interface is invisible until you call it.
+The app has two screens: **Library** and **Reader**. While reading, the interface is one slim options bar at the top, always visible, and the page fills the rest.
 
 **Reader**
 
-- Screen filled only by the page, black or dark grey background.
-- Tap in the center: a top bar (title, settings, close) and a bottom bar (page slider with previews, page number) appear.
+- An options bar always visible at the top: open a file, title and page number today; settings and the other options go there as they come. It is a bar of its own, not drawn over the page, so it never covers a part of it. A way to hide it for a full-screen page may come as an option.
+- The rest of the screen is the page, on a black or dark grey background.
+- A bottom bar with a page slider with previews and the page number comes later; whether it is always there or on demand is decided then.
 - Tap zones on the sides: left and right 25% of the screen, swapped in manga mode.
 - Modes: single page, double page (with single cover and detection of pages that are already spreads), continuous vertical scroll.
 - Fit: to width, to height, to screen.
@@ -169,7 +170,7 @@ The app has two screens: **Library** and **Reader**. While reading, the interfac
 
 - Dark theme by default, optional light theme.
 - System typography, rounded corners, no superfluous decorative icons.
-- Short animations (150–250 ms) for page transitions and controls appearing, always at 60 fps.
+- Short animations (150–250 ms) for page transitions, always at 60 fps.
 - Settings reachable in at most 2 taps, with an immediate preview of the effect.
 
 ## Memory management and performance
@@ -247,6 +248,8 @@ We start with the viewer, because that's where all the problems of existing read
    - Which image formats does each webview decode? Common formats everywhere; **AVIF not on WebKitGTK**, so the Rust fallback is needed ([`image-formats`](spikes/image-formats.md))
    - Does trackpad pinch arrive as a usable event on Windows and Linux? **Not in JavaScript on WebKitGTK**: on Linux a native GTK adapter catches it; Windows not tested yet ([`trackpad-pinch`](spikes/trackpad-pinch.md))
 
+   - Which library reads CBR files? **`rars`**, a pure Rust crate: it returns the same bytes as UnRAR, builds for Android from Windows (the UnRAR bindings do not), and has a free license; its costs are speed on solid RAR5 (about 4 times slower) and no reading of truncated archives ([`cbr-library`](spikes/cbr-library.md))
+
    Every "no" leads to fixing this document before M1.
 3. **M1 — Basic viewer.** Open CBZ, single page, high-quality rendering, keyboard and tap navigation.
 4. **M2 — Gesture engine.** Zoom, pan, swipe with thresholds, trackpad inertia handling. Testing on Android.
@@ -283,6 +286,6 @@ Open questions:
 - [x] Project name: **gutter**
 - [x] License: **MIT**
 - [x] Rendering on `<canvas>` or `<img>`: **`<canvas>` with a 2D context** ([`canvas-vs-img` benchmark](spikes/canvas-vs-img.md)): an `<img>` either lets the browser downscale, leaving moire, or needs the page re-encoded as PNG, up to 25 times slower
-- [ ] CBR (decided by the M2.5 spike): `unrar` crate or libarchive. With MIT, GPL compatibility is no longer a concern, but the UnRAR license is not an open-source license: F-Droid treats apps bundling it as non-free. libarchive (BSD) avoids this but is harder to build for Android
+- [x] CBR library: **`rars`** (pure Rust, Apache-2.0), chosen by the [`cbr-library` spike](spikes/cbr-library.md). The UnRAR license is not an open-source license (F-Droid treats apps bundling it as non-free) and its bindings do not build for Android from Windows; libarchive was not tried, as it needs a C build for every Android target. UnRAR could come back as an optional feature if truncated archives turn out to matter
 - [ ] Default memory budget on mobile: set from the M0.5 and M3 measurements
 - [ ] Apple Developer account for iOS: yes or no
