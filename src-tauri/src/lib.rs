@@ -1,7 +1,9 @@
 use tauri::Manager;
 
 pub mod archive;
+pub mod cbz;
 pub mod convert;
+pub mod format;
 pub mod pinch;
 pub mod protocol;
 #[cfg(debug_assertions)]

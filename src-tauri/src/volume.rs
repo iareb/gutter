@@ -1,58 +1,64 @@
 //! Open volumes: an archive whose index is in memory, pages read on demand.
 
 use std::fs::File;
-use std::io::Read;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use tauri::{AppHandle, State};
 use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
-use zip::ZipArchive;
 
-use crate::archive::{self, Page};
+use crate::archive::{self, PageSource};
+use crate::cbz::Cbz;
+use crate::format::{self, Format};
 
-/// An open archive. Only the ZIP index is in memory.
+/// An open archive of any format. Only its index is in memory.
 pub struct Volume {
-    archive: Mutex<ZipArchive<File>>,
-    pages: Vec<Page>,
+    source: Mutex<Box<dyn PageSource>>,
+    /// The page names in reading order, kept here to answer without locking.
+    names: Vec<String>,
 }
 
 impl Volume {
-    /// Reads the archive index and lists the pages. Fails on anything that is
-    /// not a readable ZIP with at least one page.
-    pub fn open(file: File) -> Result<Volume, String> {
-        let archive = ZipArchive::new(file)
-            .map_err(|e| format!("This file is not a CBZ archive, or it is damaged ({e})."))?;
-        let pages = archive::pages(&archive);
-        if pages.is_empty() {
+    /// Recognizes the format from the first bytes of the file, reads the index
+    /// and lists the pages. Fails on anything that is not a readable archive
+    /// with at least one page.
+    pub fn open(mut file: File) -> Result<Volume, String> {
+        let format =
+            format::detect(&mut file).map_err(|e| format!("The file could not be read ({e})."))?;
+        let source: Box<dyn PageSource> = match format {
+            // Anything unrecognized still gets tried as a ZIP: it may have a stub in front
+            Format::Zip | Format::Unknown => Box::new(Cbz::open(file)?),
+            Format::Rar => return Err("CBR files (RAR archives) are not supported yet.".into()),
+            Format::SevenZip => {
+                return Err("CB7 files (7z archives) are not supported yet.".into());
+            }
+        };
+        let names = source.pages().to_vec();
+        if names.is_empty() {
             return Err("This archive contains no pages.".into());
         }
         Ok(Volume {
-            archive: Mutex::new(archive),
-            pages,
+            source: Mutex::new(source),
+            names,
         })
+    }
+
+    /// The page names in reading order.
+    pub fn page_names(&self) -> &[String] {
+        &self.names
     }
 
     /// Reads one page (counted from 0). Returns its bytes and MIME type.
     pub fn read_page(&self, n: usize) -> Result<(Vec<u8>, &'static str), String> {
-        let page = self
-            .pages
+        let name = self
+            .names
             .get(n)
             .ok_or_else(|| format!("Page {} does not exist.", n + 1))?;
-        let unreadable =
-            |e: &dyn std::fmt::Display| format!("Page {} could not be read ({e}).", n + 1);
-
-        let mut archive = self.archive.lock().unwrap();
-        let mut entry = archive.by_index(page.index).map_err(|e| unreadable(&e))?;
-        // The size comes from the archive and may be wrong: cap what is reserved upfront
-        let mut bytes = Vec::with_capacity(entry.size().min(MAX_RESERVE) as usize);
-        entry.read_to_end(&mut bytes).map_err(|e| unreadable(&e))?;
-        Ok((bytes, archive::mime_type(&page.name)))
+        let bytes = self.source.lock().unwrap().read(n)?;
+        Ok((bytes, archive::mime_type(name)))
     }
 }
-
-const MAX_RESERVE: u64 = 64 * 1024 * 1024;
 
 /// The volume being read. Opening another one replaces it.
 #[derive(Default)]
@@ -101,7 +107,7 @@ pub fn open_volume(
         .map_err(|e| format!("The file could not be opened ({e})."))?;
     let volume = Volume::open(file)?;
 
-    let pages = volume.pages.iter().map(|p| p.name.clone()).collect();
+    let pages = volume.page_names().to_vec();
     let id = volumes.insert(volume);
     Ok(VolumeInfo { id, pages })
 }
@@ -136,8 +142,7 @@ mod tests {
     #[test]
     fn opens_an_archive_with_pages() {
         let volume = Volume::open(zip_file(&["2.jpg", "1.jpg"])).unwrap();
-        assert_eq!(volume.pages.len(), 2);
-        assert_eq!(volume.pages[0].name, "1.jpg");
+        assert_eq!(volume.page_names(), ["1.jpg", "2.jpg"]);
     }
 
     #[test]
@@ -173,6 +178,34 @@ mod tests {
     #[test]
     fn rejects_files_that_are_not_zip() {
         let error = Volume::open(temp_file(b"plain text")).err().unwrap();
+        assert!(
+            error.starts_with("This file is not a CBZ archive"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn opens_a_zip_whatever_it_is_called() {
+        // The format comes from the bytes: this is what a ZIP named `.cbr` looks like to us
+        let volume = Volume::open(zip_file(&["1.jpg"])).unwrap();
+        assert_eq!(volume.page_names().len(), 1);
+    }
+
+    #[test]
+    fn says_which_formats_are_not_supported_yet() {
+        let not_yet = |bytes: &[u8]| Volume::open(temp_file(bytes)).err().unwrap();
+        let rar = "CBR files (RAR archives) are not supported yet.";
+        assert_eq!(not_yet(b"Rar!\x1a\x07\x00\xcf\x90s\0\0"), rar);
+        assert_eq!(not_yet(b"Rar!\x1a\x07\x01\x00\x33\x92"), rar);
+        assert_eq!(
+            not_yet(b"7z\xbc\xaf\x27\x1c\x00\x04"),
+            "CB7 files (7z archives) are not supported yet."
+        );
+    }
+
+    #[test]
+    fn rejects_empty_files() {
+        let error = Volume::open(temp_file(b"")).err().unwrap();
         assert!(
             error.starts_with("This file is not a CBZ archive"),
             "{error}"
