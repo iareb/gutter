@@ -1,5 +1,5 @@
 {
-  "description": "Mouse on WebView2: click right, right, left, middle; a drag from right to center; a 700 ms press on the right. The three quick clicks on the sides turn pages and the one in the middle asks for the controls.",
+  "description": "Mouse on WebView2: click right, right, left, middle; a drag from right to center; a 700 ms press on the right. Only the three quick clicks on the sides turn pages; the one in the middle does nothing.",
   "recording": {
     "version": 1,
     "device": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
@@ -203,9 +203,6 @@
     {
       "kind": "move",
       "move": "previous"
-    },
-    {
-      "kind": "controls"
     }
   ]
 }

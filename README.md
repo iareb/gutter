@@ -8,7 +8,7 @@ A fast, open-source comic book reader for desktop and mobile that never degrades
 
 Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages on a trackpad flick, and look dated. gutter aims to fix exactly that:
 
-- **The page comes first.** While reading, only the comic is on screen; controls appear when you ask for them.
+- **The page comes first.** While reading, the screen holds the comic and a slim options bar, nothing else.
 - **No quality loss.** Pages are always rendered at the screen's physical resolution, and re-rendered sharp after zooming.
 - **Predictable gestures.** One gesture does one thing. No accidental page turns.
 - **Lightweight.** Fast startup, low memory, small installer.
@@ -21,7 +21,7 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 - Pages redrawn sharp when the window is resized or the phone rotated
 - Turn pages with the arrow keys, Page Up/Down, Space, Home and End, or by tapping or clicking the left and right side of the page
 - Zoom up to 8× and pan: pinch, double tap or double click, Ctrl+wheel, keys `+` `-` `0`; the page is redrawn sharp at every zoom
-- Swipe to turn the page (it follows your finger), one page per mouse notch and one per trackpad flick, even with its inertia; a tap in the middle shows and hides the controls
+- Swipe to turn the page (it follows your finger), one page per mouse notch and one per trackpad flick, even with its inertia
 - Pages in natural order (`page 2` before `page 10`), junk files skipped
 - JPEG, PNG, WebP and AVIF pages; AVIF is decoded in Rust where the system webview can't (Linux)
 - Clear messages for damaged files and pages, while the rest of the comic stays readable

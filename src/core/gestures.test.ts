@@ -47,22 +47,17 @@ const previous = { kind: 'move', move: 'previous' }
 const turnNext = { kind: 'turn', move: 'next' }
 const turnPrevious = { kind: 'turn', move: 'previous' }
 const settle = { kind: 'settle' }
-const controls = { kind: 'controls' }
 
 describe('taps', () => {
-  it('turn the page on the sides, and ask for the controls in the middle', () => {
+  it('turn the page on the sides, not in the middle', () => {
     expect(run(engine(), [finger('down', 0, 380), finger('up', 80, 381)])).toEqual([next])
     expect(run(engine(), [finger('down', 0, 20), finger('up', 80, 20)])).toEqual([previous])
-    expect(run(engine(), [finger('down', 0, 200), finger('up', 80, 200)])).toEqual([controls])
+    expect(run(engine(), [finger('down', 0, 200), finger('up', 80, 200)])).toEqual([])
   })
 
-  it('ask for the controls on a zoomed page too, but not on its sides', () => {
-    expect(run(engine(true), [finger('down', 0, 200), finger('up', 80, 200)])).toEqual([controls])
+  it('do nothing on a zoomed page, middle or sides', () => {
+    expect(run(engine(true), [finger('down', 0, 200), finger('up', 80, 200)])).toEqual([])
     expect(run(engine(true), [finger('down', 0, 20), finger('up', 80, 20)])).toEqual([])
-  })
-
-  it('in the middle with the mouse too', () => {
-    expect(run(engine(), [mouse('down', 0, 200), mouse('up', 60, 200)])).toEqual([controls])
   })
 
   it('do not count when the pointer moved, the press was long or was cancelled', () => {
@@ -184,9 +179,7 @@ describe('double tap', () => {
   ]
 
   it('zooms 2x on the tapped point of a fitted page', () => {
-    // The first tap asks for the controls; the app drops that when the second arrives
     expect(run(engine(), [...tap(0, 200), ...tap(150, 205, 305)])).toEqual([
-      controls,
       { kind: 'zoomAt', factor: 2, x: 205, y: 305 },
     ])
   })
@@ -198,11 +191,8 @@ describe('double tap', () => {
   })
 
   it('needs the two taps close in time and space', () => {
-    expect(run(engine(), [...tap(0, 200), ...tap(40 + DOUBLE_TAP_MS + 10, 200)])).toEqual([
-      controls,
-      controls,
-    ])
-    expect(run(engine(), [...tap(0, 160), ...tap(150, 240)])).toEqual([controls, controls])
+    expect(run(engine(), [...tap(0, 200), ...tap(40 + DOUBLE_TAP_MS + 10, 200)])).toEqual([])
+    expect(run(engine(), [...tap(0, 160), ...tap(150, 240)])).toEqual([])
   })
 
   it('does not wait on the sides of a fitted page: two taps there turn two pages', () => {
@@ -212,7 +202,7 @@ describe('double tap', () => {
   it('takes three taps as a double tap and a single one', () => {
     const e = engine()
     const kinds = run(e, [...tap(0, 200), ...tap(150, 200), ...tap(300, 200)]).map((a) => a.kind)
-    expect(kinds).toEqual(['controls', 'zoomAt', 'controls'])
+    expect(kinds).toEqual(['zoomAt'])
   })
 
   it('is not made by a tap after a drag', () => {
@@ -423,7 +413,6 @@ describe('double click', () => {
   it('zooms like a double tap', () => {
     const click = (t: number) => [mouse('down', t, 200), mouse('up', t + 60, 200)]
     expect(run(engine(), [...click(0), ...click(150)])).toEqual([
-      controls,
       { kind: 'zoomAt', factor: 2, x: 200, y: 300 },
     ])
   })

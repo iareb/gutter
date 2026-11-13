@@ -2,7 +2,7 @@
   import { invoke } from '@tauri-apps/api/core'
   import { open } from '@tauri-apps/plugin-dialog'
   import { fromKey, type InputEvent, type Recording } from './core/input'
-  import { DOUBLE_TAP_MS, GestureEngine, type Action } from './core/gestures'
+  import { GestureEngine, type Action } from './core/gestures'
   import { movePage, type Move } from './core/navigation'
   import { fileName, openVolume, type Volume } from './core/volume'
   import PageView from './PageView.svelte'
@@ -14,10 +14,6 @@
   /** Current page, counted from 0. */
   let page = $state(0)
   let viewer = $state<PageView>()
-  /** The header floats over the page; it is hidden while reading. */
-  let controls = $state(true)
-  const showControls = $derived(controls || !volume || !!error)
-  let pendingControls: ReturnType<typeof setTimeout> | undefined
 
   // All input goes through the gesture engine as normalized events
   const engine = new GestureEngine({
@@ -35,8 +31,6 @@
       volume = await openVolume(path)
       title = fileName(path)
       page = 0
-      // The page fills the screen; a tap in the middle brings the controls back
-      controls = false
     } catch (e) {
       volume = undefined
       error = String(e)
@@ -73,11 +67,6 @@
         return viewer?.settle()
       case 'turn':
         return turn(action.move)
-      case 'controls':
-        // After the double tap time: a double tap zooms and must not flash the controls
-        clearTimeout(pendingControls)
-        pendingControls = setTimeout(() => (controls = !controls), DOUBLE_TAP_MS)
-        return
     }
   }
 
@@ -95,8 +84,6 @@
   function input(event: InputEvent) {
     recorded?.push(event)
     const actions = engine.feed(event)
-    // Anything else that happens right after a tap in the middle cancels its toggle
-    if (actions.some((a) => a.kind !== 'controls')) clearTimeout(pendingControls)
     actions.forEach(apply)
     return actions.length > 0
   }
@@ -142,15 +129,18 @@
 <svelte:window {onkeydown} />
 
 <main>
-  <header class:hidden={!showControls} inert={!showControls}>
+  <!-- The options bar: always there, and the place where more options will go -->
+  <header>
     <button onclick={pick} disabled={busy}>Open comic…</button>
     {#if volume}
-      <span>{title ?? 'Comic'} · {page + 1} / {volume.pages.length}</span>
+      <span class="title">{title ?? 'Comic'} · {page + 1} / {volume.pages.length}</span>
     {/if}
-    {#if DEV}
-      <button class="record" onclick={toggleRecording}>{recorded ? '■ Stop' : '● Rec'}</button>
-      {#if recordStatus}<small>{recordStatus}</small>{/if}
-    {/if}
+    <div class="options">
+      {#if DEV}
+        {#if recordStatus}<small>{recordStatus}</small>{/if}
+        <button onclick={toggleRecording}>{recorded ? '■ Stop' : '● Rec'}</button>
+      {/if}
+    </div>
   </header>
 
   {#if error}
@@ -164,7 +154,6 @@
 
 <style>
   main {
-    position: relative;
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -175,25 +164,29 @@
       env(safe-area-inset-left);
   }
 
-  /* Over the page, so showing and hiding it never resizes the page */
   header {
-    position: absolute;
-    z-index: 1;
-    top: 0;
-    right: 0;
-    left: 0;
     display: flex;
+    flex: none;
     gap: 16px;
     align-items: center;
-    padding: calc(12px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 12px
-      calc(16px + env(safe-area-inset-left));
-    background: rgb(18 18 22 / 92%);
-    transition: opacity 150ms;
+    padding: 10px 16px;
+    background: #18181c;
+    border-bottom: 1px solid #26262c;
   }
 
-  header.hidden {
-    opacity: 0;
-    pointer-events: none;
+  .title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Whatever options the bar gets stay on the right */
+  .options {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    min-width: 0;
+    margin-left: auto;
   }
 
   button {
@@ -203,10 +196,6 @@
     background: #26262c;
     border: 1px solid #34343c;
     border-radius: 6px;
-  }
-
-  .record {
-    margin-left: auto;
   }
 
   small {
