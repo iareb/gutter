@@ -3,9 +3,12 @@ use tauri::Manager;
 pub mod archive;
 pub mod cbz;
 pub mod convert;
+#[cfg(test)]
+mod fixtures;
 pub mod format;
 pub mod pinch;
 pub mod protocol;
+pub mod rar;
 #[cfg(debug_assertions)]
 pub mod recording;
 pub mod volume;

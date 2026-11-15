@@ -11,6 +11,7 @@ use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
 use crate::archive::{self, PageSource};
 use crate::cbz::Cbz;
 use crate::format::{self, Format};
+use crate::rar::Rar;
 
 /// An open archive of any format. Only its index is in memory.
 pub struct Volume {
@@ -29,7 +30,7 @@ impl Volume {
         let source: Box<dyn PageSource> = match format {
             // Anything unrecognized still gets tried as a ZIP: it may have a stub in front
             Format::Zip | Format::Unknown => Box::new(Cbz::open(file)?),
-            Format::Rar => return Err("CBR files (RAR archives) are not supported yet.".into()),
+            Format::Rar => Box::new(Rar::open(file)?),
             Format::SevenZip => {
                 return Err("CB7 files (7z archives) are not supported yet.".into());
             }
@@ -118,6 +119,8 @@ mod tests {
 
     use zip::write::{SimpleFileOptions, ZipWriter};
 
+    use crate::fixtures;
+
     use super::{Volume, Volumes};
 
     fn temp_file(bytes: &[u8]) -> std::fs::File {
@@ -193,13 +196,34 @@ mod tests {
 
     #[test]
     fn says_which_formats_are_not_supported_yet() {
-        let not_yet = |bytes: &[u8]| Volume::open(temp_file(bytes)).err().unwrap();
-        let rar = "CBR files (RAR archives) are not supported yet.";
-        assert_eq!(not_yet(b"Rar!\x1a\x07\x00\xcf\x90s\0\0"), rar);
-        assert_eq!(not_yet(b"Rar!\x1a\x07\x01\x00\x33\x92"), rar);
-        assert_eq!(
-            not_yet(b"7z\xbc\xaf\x27\x1c\x00\x04"),
-            "CB7 files (7z archives) are not supported yet."
+        let error = Volume::open(temp_file(b"7z\xbc\xaf\x27\x1c\x00\x04"))
+            .err()
+            .unwrap();
+        assert_eq!(error, "CB7 files (7z archives) are not supported yet.");
+    }
+
+    #[test]
+    fn opens_a_cbr_and_reads_its_pages() {
+        for name in ["pages-rar5.cbr", "pages-rar4.cbr", "pages-rar5-store.cbr"] {
+            let volume = Volume::open(fixtures::open(name)).unwrap();
+            assert_eq!(
+                volume.page_names(),
+                ["page 1.png", "page 2.png", "page 10.png"],
+                "{name}"
+            );
+            let (bytes, mime) = volume.read_page(2).unwrap();
+            assert_eq!((bytes, mime), (fixtures::page("page 10.png"), "image/png"));
+        }
+    }
+
+    #[test]
+    fn a_damaged_cbr_gives_a_clear_message() {
+        let mut bytes = std::fs::read(fixtures::path("pages-rar4.cbr")).unwrap();
+        bytes.truncate(bytes.len() / 2);
+        let error = Volume::open(temp_file(&bytes)).err().unwrap();
+        assert!(
+            error.starts_with("This file is not a CBR archive"),
+            "{error}"
         );
     }
 
