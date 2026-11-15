@@ -17,5 +17,11 @@ pub fn open(name: &str) -> File {
 
 /// The bytes of one of the pages the fixture archives were made from.
 pub fn page(name: &str) -> Vec<u8> {
-    std::fs::read(path(&format!("pages/{name}"))).unwrap_or_else(|e| panic!("fixture {name}: {e}"))
+    page_in("pages", name)
+}
+
+/// The same, from a folder of pages: `pages` or `pages-12`.
+pub fn page_in(folder: &str, name: &str) -> Vec<u8> {
+    std::fs::read(path(&format!("{folder}/{name}")))
+        .unwrap_or_else(|e| panic!("fixture {name}: {e}"))
 }
