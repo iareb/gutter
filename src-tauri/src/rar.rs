@@ -320,6 +320,10 @@ impl Solid {
             .collect();
         let last = self.pages[hi].0;
 
+        // The old window goes first: two windows at once would double the memory, and
+        // whatever the pass keeps replaces it anyway, even when the pass fails
+        self.window = HashMap::new();
+
         let mut current = 0;
         let mut started = Vec::new();
         self.passes += 1;
