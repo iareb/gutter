@@ -16,7 +16,7 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 
 ## What works today
 
-- Open a CBZ file with the system file picker, on desktop and Android
+- Open CBZ and CBR files (RAR 4 and 5, solid or not) with the system file picker, on desktop and Android; the format is read from the contents, not from the name
 - One page at a time, at the screen's physical resolution: pages are downscaled in steps so fine patterns and screentones don't turn into moire, and drawn one image pixel per screen pixel
 - Pages redrawn sharp when the window is resized or the phone rotated
 - Turn pages with the arrow keys, Page Up/Down, Space, Home and End, or by tapping or clicking the left and right side of the page
@@ -24,7 +24,7 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 - Swipe to turn the page (it follows your finger), one page per mouse notch and one per trackpad flick, even with its inertia
 - Pages in natural order (`page 2` before `page 10`), junk files skipped
 - JPEG, PNG, WebP and AVIF pages; AVIF is decoded in Rust where the system webview can't (Linux)
-- Clear messages for damaged files and pages, while the rest of the comic stays readable
+- Clear messages for damaged, incomplete and password-protected files, and for damaged pages, while the rest of the comic stays readable
 
 ## Planned features
 
