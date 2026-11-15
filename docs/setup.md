@@ -172,4 +172,4 @@ To turn a recording into a test, put it in `tests/recordings/` as `{ "descriptio
 
 ## Test files
 
-Copyrighted comics cannot go in the repo. `pnpm corpus` generates synthetic test volumes in `corpus/generated/` (about 130 MB); [corpus/README.md](../corpus/README.md) explains each one and where to put real comics.
+Copyrighted comics cannot go in the repo. `pnpm corpus` generates synthetic test volumes in `corpus/generated/` (about 130 MB); [corpus/README.md](../corpus/README.md) explains each one and where to put real comics. The CBR volumes (another 250 MB) need the `rar` command line (WinRAR, or the `rar` package); without it they are skipped.

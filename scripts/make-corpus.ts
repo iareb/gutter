@@ -3,8 +3,13 @@
 //
 // Pages are drawn pixel by pixel, without fonts, so the output is identical on
 // every machine: digits come from a built-in 5x7 bitmap font.
+//
+// The CBR volumes are made with the `rar` command line, which is not free
+// software and is not part of this repo: when it is not found they are skipped
+// (the two that need no archiver are made anyway) and everything else works.
 
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { zipSync } from 'fflate'
 import sharp from 'sharp'
@@ -187,12 +192,21 @@ const COMIC_INFO = new TextEncoder().encode(
 const zip = (entries: Entries) =>
   zipSync(entries, { level: 0, mtime: new Date('2026-01-01T00:00:00Z') })
 
+// Pages are drawn once and shared: the CBZ and the CBR of a volume hold the same bytes
+const pageCache = new Map<string, Entries>()
+
 async function comicPages(total: number, noise = 0) {
-  const entries: Entries = {}
-  for (let n = 1; n <= total; n++) {
-    entries[`${String(n).padStart(3, '0')}.jpg`] = await jpeg(comicPage(n, total, noise))
+  const key = `${total}:${noise}`
+  let entries = pageCache.get(key)
+  if (!entries) {
+    entries = {}
+    for (let n = 1; n <= total; n++) {
+      entries[`${String(n).padStart(3, '0')}.jpg`] = await jpeg(comicPage(n, total, noise))
+    }
+    pageCache.set(key, entries)
   }
-  return entries
+  // A copy: some volumes change an entry
+  return { ...entries }
 }
 
 const volumes: Record<string, () => Promise<Uint8Array>> = {
@@ -296,6 +310,120 @@ const volumes: Record<string, () => Promise<Uint8Array>> = {
   'no-pages.cbz': async () => zip({ 'ComicInfo.xml': COMIC_INFO, 'readme.txt': COMIC_INFO }),
 }
 
+// ---- CBR volumes ------------------------------------------------------------
+
+/** The `rar` command line: the RAR environment variable, the PATH, or WinRAR's folder. */
+function findRar(): string | undefined {
+  const candidates = [
+    process.env.RAR,
+    'rar',
+    'C:\\Program Files\\WinRAR\\Rar.exe',
+    'C:\\Program Files (x86)\\WinRAR\\Rar.exe',
+  ]
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    // `-iver` prints the version and exits: nothing is read or written
+    const run = spawnSync(candidate, ['-iver'], { encoding: 'utf8' })
+    if (!run.error && run.status === 0) return candidate
+  }
+  return undefined
+}
+
+type RarOptions = {
+  /** 4 or 5: the RAR format */
+  version: 4 | 5
+  solid?: boolean
+  /** No compression: the pages stay as they are in the file */
+  store?: boolean
+  password?: string
+  /** Encrypt the names too */
+  encryptNames?: boolean
+}
+
+const FIXED_TIME = new Date('2026-01-01T00:00:00Z')
+
+/** Packs the entries into a RAR archive: written to a folder, with fixed times, and archived. */
+function makeRar(rar: string, entries: Entries, options: RarOptions): Uint8Array {
+  const work = join(OUT, '.rar-work')
+  const files = join(work, 'files')
+  const archive = join(work, 'out.rar')
+  rmSync(work, { recursive: true, force: true })
+  mkdirSync(files, { recursive: true })
+  for (const [name, bytes] of Object.entries(entries)) {
+    const path = join(files, name)
+    mkdirSync(join(path, '..'), { recursive: true })
+    writeFileSync(path, bytes)
+    utimesSync(path, FIXED_TIME, FIXED_TIME)
+  }
+  const args = ['a', '-idq', '-r', `-ma${options.version}`, options.store ? '-m0' : '-m3']
+  if (options.solid) args.push('-s')
+  if (options.password) args.push(`${options.encryptNames ? '-hp' : '-p'}${options.password}`)
+  args.push(archive, '.')
+  const run = spawnSync(rar, args, { cwd: files, encoding: 'utf8' })
+  if (run.error || run.status !== 0) {
+    throw new Error(`rar failed (${run.status}): ${run.error ?? ''}${run.stdout}${run.stderr}`)
+  }
+  const bytes = readFileSync(archive)
+  rmSync(work, { recursive: true, force: true })
+  return bytes
+}
+
+/** Flips a byte inside the stored data of one entry of an archive made without compression. */
+function damage(archive: Uint8Array, entry: Uint8Array, at: number) {
+  const copy = Buffer.from(archive)
+  const start = copy.indexOf(entry)
+  if (start < 0) throw new Error('the entry is not stored as it is in the archive')
+  copy[start + at] ^= 0xff
+  return copy
+}
+
+const rar = findRar()
+const needRar: Record<string, (rar: string) => Promise<Uint8Array>> = {
+  // Everyday reading, in both RAR formats and solid
+  'basic-rar5.cbr': async (r) =>
+    makeRar(r, { 'ComicInfo.xml': COMIC_INFO, ...(await comicPages(20)) }, { version: 5 }),
+  'basic-rar4.cbr': async (r) =>
+    makeRar(r, { 'ComicInfo.xml': COMIC_INFO, ...(await comicPages(20)) }, { version: 4 }),
+  'basic-solid.cbr': async (r) =>
+    makeRar(
+      r,
+      { 'ComicInfo.xml': COMIC_INFO, ...(await comicPages(20)) },
+      { version: 5, solid: true },
+    ),
+
+  // ~120 MB: page changes and memory, and in the solid one the window of decoded pages
+  'large-rar5.cbr': async (r) => makeRar(r, await comicPages(40, 120), { version: 5 }),
+  'large-solid.cbr': async (r) =>
+    makeRar(r, await comicPages(40, 120), { version: 5, solid: true }),
+
+  // Files that cannot be read: each must say what is wrong
+  'truncated.cbr': async (r) => {
+    const whole = makeRar(r, await comicPages(5), { version: 5 })
+    return whole.slice(0, Math.floor(whole.length * 0.6))
+  },
+  'password.cbr': async (r) => makeRar(r, await comicPages(3), { version: 5, password: 'secret' }),
+  'password-names.cbr': async (r) =>
+    makeRar(r, await comicPages(3), { version: 5, password: 'secret', encryptNames: true }),
+  'damaged-page.cbr': async (r) => {
+    const pages = await comicPages(3)
+    const archive = makeRar(r, pages, { version: 5, store: true })
+    // The second page is damaged, the other two are fine
+    return damage(archive, pages['002.jpg'], 1000)
+  },
+}
+const skipped: string[] = []
+for (const [name, make] of Object.entries(needRar)) {
+  if (rar) volumes[name] = () => make(rar)
+  else skipped.push(name)
+}
+
+// These two need no archiver
+// A RAR signature and then nothing that makes sense
+volumes['not-a-rar.cbr'] = async () =>
+  new Uint8Array([0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x01, 0x00, ...new Array(5000).fill(7)])
+// The name says CBR, the contents are a ZIP: it must open as a CBZ
+volumes['zip-as-cbr.cbr'] = () => volumes['basic.cbz']()
+
 // ---- Run --------------------------------------------------------------------
 
 mkdirSync(OUT, { recursive: true })
@@ -305,5 +433,11 @@ for (const [name, make] of Object.entries(volumes)) {
   writeFileSync(join(OUT, name), bytes)
   const mb = (bytes.length / 1024 / 1024).toFixed(1).padStart(6)
   console.log(`${name.padEnd(18)} ${mb} MB  ${((performance.now() - t0) / 1000).toFixed(1)} s`)
+}
+if (skipped.length) {
+  console.log(
+    `\nrar was not found, so these CBR volumes were skipped: ${skipped.join(', ')}.\n` +
+      'Install rar (WinRAR, or the rar package) or point the RAR environment variable at it.',
+  )
 }
 console.log(`Written to ${OUT}`)

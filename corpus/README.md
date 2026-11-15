@@ -9,7 +9,7 @@ Comics to develop and test gutter with. Copyrighted comics never go in the repo,
 
 ## Generated volumes
 
-Run `pnpm corpus` from the repo root. The output is the same on every machine and every run, since pages are drawn without fonts and noise is seeded.
+Run `pnpm corpus` from the repo root. The output is the same on every run, since pages are drawn without fonts and noise is seeded, and the same on Windows and Linux except for `formats.cbz`, whose encoders (AVIF, WebP) come out differently in each platform's build of `sharp`. The CBR volumes that are made with `rar` are the same bytes on every run of the same `rar`, except the two with a password, which carry a random salt.
 
 | File | What it contains | What it tests |
 | --- | --- | --- |
@@ -24,6 +24,25 @@ Run `pnpm corpus` from the repo root. The output is the same on every machine an
 | `truncated.cbz` | A 5-page volume cut at 60% | Damaged archive: clear error, no crash |
 | `not-a-zip.cbz` | Plain text with a `.cbz` name | Wrong file type: clear error |
 | `no-pages.cbz` | A valid ZIP with only text files | Empty volume: clear message |
+
+## CBR volumes
+
+CBR files are RAR archives, and RAR can only be written with the `rar` command line, which is not free software and is not in this repo. `pnpm corpus` looks for it in the `RAR` environment variable, on the PATH, and in WinRAR's folder on Windows. Without it, the volumes below that need it are skipped, with a message that lists them, and everything else is made as usual. Install it with WinRAR, or with the `rar` package of the distribution. `not-a-rar.cbr` and `zip-as-cbr.cbr` need no archiver.
+
+Tiny CBR files for the Rust tests are committed instead, in [tests/fixtures](../tests/fixtures/README.md), so `cargo test` needs no `rar`.
+
+| File | What it contains | What it tests |
+| --- | --- | --- |
+| `basic-rar5.cbr`, `basic-rar4.cbr` | The pages of `basic.cbz` (20 pages and a `ComicInfo.xml`) in RAR 5 and in RAR 4, not solid | Reading CBR: the same 20 pages, in order, as the CBZ |
+| `basic-solid.cbr` | The same, RAR 5 and solid | A solid archive: in one pass, each page decoded after the ones before it |
+| `large-rar5.cbr` | The 40 heavy pages of `large.cbz`, about 120 MB | Opening and page-change times of a big CBR, memory |
+| `large-solid.cbr` | The same, RAR 5 and solid | The window of decoded pages: turning forward, back, and jumping to the last page (about a second, with "Loading page…" shown) |
+| `truncated.cbr` | A 5-page RAR 5 cut at 60% | "This archive is incomplete…", no crash |
+| `password.cbr` | 3 pages encrypted with the password `secret` | "This archive is password-protected, and gutter cannot open those yet." |
+| `password-names.cbr` | The same, with the names encrypted too | The same message: a different failure inside |
+| `damaged-page.cbr` | 3 pages stored without compression, with a byte of the second flipped | Page 2 says it is damaged; pages 1 and 3 read |
+| `not-a-rar.cbr` | A RAR signature followed by nothing that makes sense | "This file is not a CBR archive, or it is damaged…" |
+| `zip-as-cbr.cbr` | `basic.cbz` with a `.cbr` name | The format comes from the contents: it opens as a CBZ |
 
 ## Real comics
 
