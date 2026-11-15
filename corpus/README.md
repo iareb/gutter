@@ -27,7 +27,7 @@ Run `pnpm corpus` from the repo root. The output is the same on every run, since
 
 ## CBR volumes
 
-CBR files are RAR archives, and RAR can only be written with the `rar` command line, which is not free software and is not in this repo. `pnpm corpus` looks for it in the `RAR` environment variable, on the PATH, and in WinRAR's folder on Windows. Without it, the volumes below that need it are skipped, with a message that lists them, and everything else is made as usual. Install it with WinRAR, or with the `rar` package of the distribution. `not-a-rar.cbr` and `zip-as-cbr.cbr` need no archiver.
+CBR files are RAR archives, and RAR can only be written with the `rar` command line, which is not free software and is not in this repo. `pnpm corpus` looks for it in the `RAR` environment variable, on the PATH, and in WinRAR's folder on Windows. Without it, the volumes below that need it are skipped, with a message that lists them, and everything else is made as usual. Install it with WinRAR, or with the `rar` package of the distribution. `not-a-rar.cbr`, `not-yet.cb7` and `zip-as-cbr.cbr` need no archiver.
 
 Tiny CBR files for the Rust tests are committed instead, in [tests/fixtures](../tests/fixtures/README.md), so `cargo test` needs no `rar`.
 
@@ -42,6 +42,7 @@ Tiny CBR files for the Rust tests are committed instead, in [tests/fixtures](../
 | `password-names.cbr` | The same, with the names encrypted too | The same message: a different failure inside |
 | `damaged-page.cbr` | 3 pages stored without compression, with a byte of the second flipped | Page 2 says it is damaged; pages 1 and 3 read |
 | `not-a-rar.cbr` | A RAR signature followed by nothing that makes sense | "This file is not a CBR archive, or it is damaged…" |
+| `not-yet.cb7` | A 7z signature and zeros | "CB7 files (7z archives) are not supported yet.": CB7 comes after 0.1 |
 | `zip-as-cbr.cbr` | `basic.cbz` with a `.cbr` name | The format comes from the contents: it opens as a CBZ |
 
 ## Real comics

@@ -417,10 +417,13 @@ for (const [name, make] of Object.entries(needRar)) {
   else skipped.push(name)
 }
 
-// These two need no archiver
+// These three need no archiver
 // A RAR signature and then nothing that makes sense
 volumes['not-a-rar.cbr'] = async () =>
   new Uint8Array([0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x01, 0x00, ...new Array(5000).fill(7)])
+// A 7z signature: CB7 files are not read yet, and the reader must say so
+volumes['not-yet.cb7'] = async () =>
+  new Uint8Array([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, 0x00, 0x04, ...new Array(500).fill(0)])
 // The name says CBR, the contents are a ZIP: it must open as a CBZ
 volumes['zip-as-cbr.cbr'] = () => volumes['basic.cbz']()
 
