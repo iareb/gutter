@@ -135,9 +135,10 @@ The module is a state machine with four states: **idle**, **pan**, **pinch**, **
 | Tap on the sides | Previous / next page | No action |
 | Tap in the center | No action: the options bar is always visible | Same |
 | Two-finger trackpad scroll | Accumulates movement; changes page past a threshold, then blocks input until inertia dies out | Pan |
-| Mouse wheel | One notch = one page | Vertical pan |
+| Mouse wheel | One notch = one page | Vertical pan; never changes the page, however many notches (planned, M2.6: today a new burst at the edge turns it) |
 | Ctrl + wheel / trackpad pinch | Zoom centered on the cursor | Same |
-| Arrows, space, PgUp/PgDn | Page navigation | Pan, then page at the edge |
+| Arrows, space, PgUp/PgDn | Page navigation | Pan in the four directions; never change the page (planned, M2.6: today they turn it at the edge) |
+| Mouse drag with the left button (desktop) | Nothing | Pan |
 
 Telling trackpad inertia apart from intentional scrolling is the most delicate part: browsers do not report it. We estimate it from the trend of `deltaY` values (steadily decreasing values = inertia) and from a lockout window after each page change. This is an empirical estimate: thresholds must be tuned on real devices, they cannot be worked out on paper.
 
@@ -254,10 +255,11 @@ We start with the viewer, because that's where all the problems of existing read
 3. **M1 — Basic viewer.** Open CBZ, single page, high-quality rendering, keyboard and tap navigation.
 4. **M2 — Gesture engine.** Zoom, pan, swipe with thresholds, trackpad inertia handling. Testing on Android.
 5. **M2.5 — CBR.** Moved up from M5. A spike first to choose the RAR library, then reading CBR files. It comes before M3 because preloading and the memory budget depend on what a page costs in each format: in a solid RAR archive a page can only be read after decompressing the ones before it.
-6. **M3 — Reading modes.** Double page, vertical scroll, manga direction, preloading and memory budget.
-7. **M4 — Library.** Cover grid, thumbnails, reading position saved in SQLite.
-8. **M5 — Formats and release.** Image folders, first public 0.1 release on GitHub.
-9. **After 0.1.** PDF, CB7, ComicInfo.xml, iOS and macOS builds, F-Droid.
+6. **M2.6 — Navigation by hand.** A zoomed page that neither the wheel nor the arrows can turn, and a page slider. Asked for after trying M2 on the desktop.
+7. **M3 — Reading modes.** Double page, vertical scroll, manga direction, preloading and memory budget.
+8. **M4 — Library.** Cover grid, thumbnails, reading position saved in SQLite.
+9. **M5 — Formats and release.** Image folders, first public 0.1 release on GitHub.
+10. **After 0.1.** PDF, CB7, ComicInfo.xml, iOS and macOS builds, F-Droid.
 
 **Rough estimates.** Estimates assume development by coding agents, with one person leading, testing and validating about 10 hours a week. The bottleneck is not writing code but testing it on devices and tuning gestures.
 
@@ -267,6 +269,7 @@ We start with the viewer, because that's where all the problems of existing read
 | M1 | 1–2 weeks | **6 days** (Nov 2 – Nov 7) |
 | M2 | 3–5 weeks (biggest risk: tuning on real devices) | 2–3 weeks |
 | M2.5 | — (part of M5) | about 1 week, spike included |
+| M2.6 | — (asked for during M2) | two or three days |
 | M3 | 2–3 weeks | 2–3 weeks |
 | M4 | 1–2 weeks | 1 week |
 | M5 | 1–2 weeks | 1 week (CBR moved to M2.5) |
