@@ -14,6 +14,17 @@
   /** Current page, counted from 0. */
   let page = $state(0)
   let viewer = $state<PageView>()
+  /** The page is still being fetched, and has been for a moment: say so. */
+  let loading = $state(false)
+  let slow = $state(false)
+  $effect(() => {
+    if (!loading) {
+      slow = false
+      return
+    }
+    const timer = setTimeout(() => (slow = true), 400)
+    return () => clearTimeout(timer)
+  })
 
   // All input goes through the gesture engine as normalized events
   const engine = new GestureEngine({
@@ -136,6 +147,7 @@
       <span class="title">{title ?? 'Comic'} · {page + 1} / {volume.pages.length}</span>
     {/if}
     <div class="options">
+      {#if slow}<small>Loading page {page + 1}…</small>{/if}
       {#if DEV}
         {#if recordStatus}<small>{recordStatus}</small>{/if}
         <button onclick={toggleRecording}>{recorded ? '■ Stop' : '● Rec'}</button>
@@ -146,7 +158,13 @@
   {#if error}
     <p class="error" role="alert">{error}</p>
   {:else if volume}
-    <PageView bind:this={viewer} {volume} {page} oninput={input} />
+    <PageView
+      bind:this={viewer}
+      {volume}
+      {page}
+      oninput={input}
+      onloading={(value) => (loading = value)}
+    />
   {:else}
     <p class="empty">gutter</p>
   {/if}

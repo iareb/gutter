@@ -37,8 +37,10 @@
     page: number
     /** Every pointer and wheel event on the page, normalized. */
     oninput: (event: InputEvent) => void
+    /** Tells when the bytes of the page are being fetched: a page in a solid archive can take a while. */
+    onloading?: (loading: boolean) => void
   }
-  let { volume, page, oninput }: Props = $props()
+  let { volume, page, oninput, onloading }: Props = $props()
 
   let box: HTMLDivElement
   let canvas: HTMLCanvasElement
@@ -79,6 +81,9 @@
       ? fitPage(original, { width: room.width / dpr, height: room.height / dpr }, dpr)
       : undefined,
   )
+
+  const loading = $derived(!data && !failure)
+  $effect(() => onloading?.(loading))
 
   const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
