@@ -217,14 +217,11 @@ mod tests {
     }
 
     #[test]
-    fn a_damaged_cbr_gives_a_clear_message() {
+    fn a_cbr_cut_short_says_it_is_incomplete() {
         let mut bytes = std::fs::read(fixtures::path("pages-rar4.cbr")).unwrap();
         bytes.truncate(bytes.len() / 2);
         let error = Volume::open(temp_file(&bytes)).err().unwrap();
-        assert!(
-            error.starts_with("This file is not a CBR archive"),
-            "{error}"
-        );
+        assert!(error.starts_with("This archive is incomplete"), "{error}");
     }
 
     #[test]
