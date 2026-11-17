@@ -23,7 +23,8 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 - Zoom up to 8× and pan: pinch, double tap or double click, Ctrl+wheel, keys `+` `-` `0`; the page is redrawn sharp at every zoom
 - A slider in the options bar to go to any page; a zoomed page stays put: neither the wheel nor the arrows turn it, they only move it
 - The pages around the current one are prepared in advance, within a memory budget: the next page is on screen at once, and memory stays flat over a long reading session
-- Swipe to turn the page (it follows your finger), one page per mouse notch and one per trackpad flick, even with its inertia
+- Swipe to turn the page: it follows your finger with the next page beside it; a key, a tap or a wheel notch slide the pages too. One page per mouse notch and one per trackpad flick, even with its inertia
+- Left-to-right or right-to-left (manga) reading, from the View menu in the options bar; the choice is remembered
 - Pages in natural order (`page 2` before `page 10`), junk files skipped
 - JPEG, PNG, WebP and AVIF pages; AVIF is decoded in Rust where the system webview can't (Linux)
 - Clear messages for damaged, incomplete and password-protected files, and for damaged pages, while the rest of the comic stays readable
@@ -32,7 +33,6 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 
 - Image folders (JPEG, PNG, WebP, AVIF)
 - Double page and vertical scroll (webtoon) modes
-- Left-to-right and right-to-left (manga) reading
 - Library with covers and saved reading position
 
 Built with [Tauri 2](https://tauri.app), [Svelte 5](https://svelte.dev), TypeScript and Rust. See the [design document](docs/design.md) for the full plan.

@@ -173,7 +173,8 @@ The app has two screens: **Library** and **Reader**. While reading, the interfac
 - Dark theme by default, optional light theme.
 - System typography, rounded corners, no superfluous decorative icons.
 - Short animations (150–250 ms) for page transitions, always at 60 fps.
-- Settings reachable in at most 2 taps, with an immediate preview of the effect.
+- Settings reachable in at most 2 taps, with an immediate preview of the effect. *Since M3:* a View button in the options bar opens a menu with the reading direction and the page mode; a choice applies at once and closes the menu. The choices hold for every volume and are kept in the webview's storage; choices for one volume come with the library.
+- Right to left mirrors what has a side: the tap zones, the left and right arrows, the swipe, the slide of the pages and the slider. What has no side keeps the order of the pages: up and down, PageUp, PageDown, Space and the wheel go forward and back in both directions.
 
 ## Memory management and performance
 
