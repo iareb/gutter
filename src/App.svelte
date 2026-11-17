@@ -3,7 +3,8 @@
   import { open } from '@tauri-apps/plugin-dialog'
   import { fromKey, type InputEvent, type Recording } from './core/input'
   import { GestureEngine, type Action } from './core/gestures'
-  import { movePage, type Move } from './core/navigation'
+  import { leaveSide, movePage, type Direction, type Move } from './core/navigation'
+  import { loadSettings, saveSettings, type Settings } from './core/settings'
   import { defaultBudget } from './core/budget'
   import { PageStore } from './core/pages'
   import { fileName, openVolume, pageLoaders, type Volume } from './core/volume'
@@ -11,6 +12,12 @@
   import Stats from './Stats.svelte'
 
   let volume = $state<Volume>()
+  /** The reader's choices for every volume, saved as soon as they change. */
+  let settings = $state.raw<Settings>(loadSettings())
+  $effect(() => saveSettings(settings))
+  /** The View menu is open. */
+  let menu = $state(false)
+  let viewBox = $state<HTMLDivElement>()
   /** Fetches, decodes and keeps the pages of the open volume. */
   let store = $state.raw<PageStore>()
   /** The development overlay: always in development builds, in release when localStorage asks. */
@@ -65,6 +72,33 @@
     width: () => viewer?.area().width ?? 0,
     zoomed: () => viewer?.zoomed() ?? false,
     edges: () => viewer?.edges() ?? { left: true, right: true },
+    direction: () => settings.direction,
+  })
+
+  function choose(direction: Direction) {
+    settings = { ...settings, direction }
+    menu = false
+    blur()
+  }
+
+  // The menu closes on a click or tap outside it, and on Escape
+  $effect(() => {
+    if (!menu) return
+    const outside = (event: PointerEvent) => {
+      if (!viewBox?.contains(event.target as Node)) menu = false
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        menu = false
+        blur()
+      }
+    }
+    window.addEventListener('pointerdown', outside, true)
+    window.addEventListener('keydown', escape, true)
+    return () => {
+      window.removeEventListener('pointerdown', outside, true)
+      window.removeEventListener('keydown', escape, true)
+    }
   })
 
   async function pick() {
@@ -93,8 +127,16 @@
   // Otherwise Space and Enter would press the button again instead of turning pages
   const blur = () => (document.activeElement as HTMLElement | null)?.blur()
 
+  /**
+   * A tap, a key or a wheel notch changes the page. To the page beside, the pages
+   * slide when the new one is ready; to the first or the last, the page changes in place.
+   */
   function go(move: Move) {
-    if (volume) page = movePage(move, page, volume.pages.length)
+    if (!volume) return
+    const next = movePage(move, page, volume.pages.length)
+    if (next === page) return
+    if (move === 'next' || move === 'previous') viewer?.leave(leaveSide(move, settings.direction))
+    page = next
   }
 
   function apply(action: Action) {
@@ -125,8 +167,8 @@
     if (!volume) return
     const next = movePage(move, page, volume.pages.length)
     if (next === page) return viewer?.settle()
-    // Left to right reading: the next page comes from the right, so the old one leaves to the left
-    viewer?.leave(move === 'next' ? -1 : 1)
+    // The next page comes from the right in left-to-right reading, from the left in right to left
+    viewer?.leave(leaveSide(move, settings.direction))
     page = next
   }
 
@@ -184,6 +226,38 @@
   <!-- The options bar: always there, and the place where more options will go -->
   <header>
     <button onclick={pick} disabled={busy}>Open comic…</button>
+    <div class="view" bind:this={viewBox}>
+      <button aria-haspopup="menu" aria-expanded={menu} onclick={() => (menu = !menu)}>View</button>
+      {#if menu}
+        <div class="menu" role="menu">
+          <fieldset>
+            <legend>Reading direction</legend>
+            <label>
+              <input
+                type="radio"
+                name="direction"
+                checked={settings.direction === 'ltr'}
+                onchange={() => choose('ltr')}
+              />
+              Left to right
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="direction"
+                checked={settings.direction === 'rtl'}
+                onchange={() => choose('rtl')}
+              />
+              Right to left (manga)
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend>Pages</legend>
+            <label><input type="radio" name="mode" checked disabled /> One at a time</label>
+          </fieldset>
+        </div>
+      {/if}
+    </div>
     {#if volume}
       <span class="title">{title ?? 'Comic'} · {target ?? page + 1} / {volume.pages.length}</span>
       {#if volume.pages.length > 1}
@@ -194,6 +268,7 @@
           max={volume.pages.length}
           value={target ?? page + 1}
           aria-label="Go to page"
+          style:direction={settings.direction}
           oninput={(event) => slide(event.currentTarget.valueAsNumber)}
           onchange={(event) => {
             commit(event.currentTarget.valueAsNumber)
@@ -220,6 +295,7 @@
       {volume}
       {store}
       {page}
+      reading={settings.direction}
       oninput={input}
       onloading={(value) => (loading = value)}
     />
@@ -264,6 +340,52 @@
     flex: 1 1 160px;
     min-width: 120px;
     height: 32px;
+    margin: 0;
+    accent-color: #8a9bff;
+  }
+
+  .view {
+    position: relative;
+  }
+
+  .menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 3;
+    display: grid;
+    gap: 10px;
+    min-width: 220px;
+    padding: 12px 14px;
+    background: #1f1f24;
+    border: 1px solid #34343c;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px #0008;
+  }
+
+  fieldset {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  legend {
+    margin-bottom: 4px;
+    font-size: 0.8rem;
+    opacity: 0.7;
+  }
+
+  label {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    /* Big enough for a finger */
+    min-height: 32px;
+  }
+
+  input[type='radio'] {
     margin: 0;
     accent-color: #8a9bff;
   }

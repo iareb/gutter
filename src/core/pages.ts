@@ -137,6 +137,12 @@ export class PageStore {
     return undefined
   }
 
+  /** The decoded page if it is ready, without counting it in the overlay's hits and misses. */
+  cached(n: number, target: Size): ImageBitmap | undefined {
+    const item = this.cache.get(bitmapKey(n, target))
+    return item?.kind === 'bitmap' ? item.bitmap : undefined
+  }
+
   /** The encoded page: from the cache, or fetched (once, however many ask). */
   data(n: number): Promise<PageData> {
     const item = this.cache.get(dataKey(n))

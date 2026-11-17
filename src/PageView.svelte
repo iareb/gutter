@@ -30,6 +30,7 @@
     zoomView,
     type View,
   } from './core/view'
+  import { pageBeside, type Direction } from './core/navigation'
   import type { PageStore } from './core/pages'
   import type { Volume } from './core/volume'
 
@@ -39,12 +40,14 @@
     store: PageStore
     /** Counted from 0. */
     page: number
+    /** Reading direction: which page sits on which side of this one. */
+    reading: Direction
     /** Every pointer and wheel event on the page, normalized. */
     oninput: (event: InputEvent) => void
     /** Tells when the bytes of the page are being fetched: a page in a solid archive can take a while. */
     onloading?: (loading: boolean) => void
   }
-  let { volume, store, page, oninput, onloading }: Props = $props()
+  let { volume, store, page, reading, oninput, onloading }: Props = $props()
 
   let box: HTMLDivElement
   let canvas: HTMLCanvasElement
@@ -60,12 +63,23 @@
   /** Why the current page cannot be shown. */
   let failure = $state<string>()
 
-  /** How long the page takes to slide back in place, or out of the screen. */
+  // Turning a page slides it out and the next one in beside it, when the next
+  // one is ready (made in advance); otherwise the page changes in place, and the
+  // old page stays on screen until the new one can be drawn: never a blank page.
+  // Both pages sit on a strip that moves sideways: under the finger during a
+  // swipe, by itself for SLIDE_MS when the page turns. The strip is moved here,
+  // not through Svelte, so that a slide cut short by the next one starts from
+  // where the strip really is.
+
+  /** How long the pages take to slide. */
   const SLIDE_MS = 200
-  /** Sideways shift of the page during a swipe, in CSS pixels. */
-  let offset = $state(0)
-  /** Whether the shift is animated: not while following the finger. */
-  let sliding = $state(false)
+  /** Space between the page and the one beside it while they slide, in CSS pixels. */
+  const GAP = 16
+  let strip: HTMLDivElement
+  /** The page beside this one, shown while sliding. */
+  let beside: HTMLCanvasElement
+  /** Which side it is drawn on: 1 the right, -1 the left, 0 none. */
+  let besideSide: -1 | 0 | 1 = 0
   /** The old page is sliding out: the new one is drawn once it is gone. */
   let leaving = $state(false)
   let leaveTimer: ReturnType<typeof setTimeout> | undefined
@@ -76,7 +90,7 @@
   let turnPending = false
   let previous = 0
   /** Whether the reader is going back: the pages behind are then prepared first. */
-  let direction = false
+  let backwards = false
 
   /** The space for the page in whole physical pixels: it must never need rescaling to fit. */
   const room = $derived(
@@ -131,39 +145,91 @@
     view = zoomAround(view, factor, { x: x * dpr, y: y * dpr }, fit, room)
   }
 
-  /** Shows the page shifted sideways by `dx` CSS pixels: it follows the finger. */
+  function place(x: number, animate: boolean) {
+    strip.style.transition = animate ? `transform ${SLIDE_MS}ms ease-out` : ''
+    strip.style.transform = x ? `translateX(${x}px)` : ''
+  }
+
+  /** How far the page beside sits from this one, in CSS pixels. */
+  const besideShift = () => box.getBoundingClientRect().width + GAP
+
+  /** Draws the page on the given side of this one, if it is ready. Returns whether it is. */
+  function showBeside(side: -1 | 1): boolean {
+    if (besideSide === side) return true
+    const n = pageBeside(page, side, reading)
+    const size = n >= 0 && n < volume.pages.length ? store.peekSize(n) : undefined
+    const bitmap = size && room && targetOf(n, size)
+    if (!bitmap || !room) {
+      hideBeside()
+      return false
+    }
+    draw(beside, bitmap.bitmap, bitmap.fit, FIT_VIEW, room, dpr, side * besideShift())
+    besideSide = side
+    return true
+  }
+
+  /** A page at zoom 1, as the preloading made it. */
+  function targetOf(n: number, size: Size) {
+    const space = { width: room!.width / dpr, height: room!.height / dpr }
+    const f = fitPage(size, space, dpr)
+    const fit = { width: Math.max(f.width, 1), height: Math.max(f.height, 1) }
+    const bitmap = store.cached(n, fit)
+    return bitmap && { bitmap, fit }
+  }
+
+  function hideBeside() {
+    besideSide = 0
+    if (beside) beside.width = 0
+  }
+
+  /** Shows the page shifted sideways by `dx` CSS pixels, with the page beside it: it follows the finger. */
   export function follow(dx: number) {
     store.busy()
     if (leaving) return
-    sliding = false
     // On a whole physical pixel, like the page itself
-    offset = Math.round(dx * dpr) / dpr
+    const x = Math.round(dx * dpr) / dpr
+    // Pulling to the left uncovers the page on the right
+    if (x !== 0) showBeside(x < 0 ? 1 : -1)
+    place(x, false)
   }
 
   /** Slides the page back in place after a swipe that did not turn it. */
   export function settle() {
     if (leaving) return
-    sliding = true
-    offset = 0
+    place(0, true)
   }
 
   /**
-   * Slides the page out of the screen, to the left (-1) or the right (1), before
-   * the page changes. The new page is drawn once the old one is gone.
+   * Slides the page out of the screen, to the left (-1) or the right (1), and the
+   * page beside it in, before the page changes. Returns false when that page is
+   * not ready: then nothing slides, and the page changes in place.
    */
-  export function leave(direction: -1 | 1) {
-    sliding = true
+  export function leave(side: -1 | 1): boolean {
+    // A slide still going on ends at once: the next one starts from there
+    finish()
+    if (!showBeside(-side as -1 | 1)) {
+      place(0, false)
+      return false
+    }
     leaving = true
-    offset = direction * box.getBoundingClientRect().width
+    place(side * besideShift(), true)
+    leaveTimer = setTimeout(finish, SLIDE_MS)
+    return true
+  }
+
+  /** The end of a slide: the strip back in place, with the new page on it. */
+  function finish() {
+    if (!leaving) return
     clearTimeout(leaveTimer)
-    leaveTimer = setTimeout(() => {
-      leaveEnd = performance.now()
-      // Not decoded yet: the canvas still holds the old page, which must not come back
-      if (!decoded) canvas.width = 0
-      sliding = false
-      offset = 0
-      leaving = false
-    }, SLIDE_MS)
+    leaveEnd = performance.now()
+    leaving = false
+    place(0, false)
+    // Applied now, so that a slide starting right after starts from here
+    strip.getBoundingClientRect()
+    hideBeside()
+    // Drawn in this same frame, not after it: the old page must not show again
+    if (decoded && fit && room) draw(canvas, decoded, fit, view, room, dpr)
+    else canvas.width = 0
   }
 
   /** Which sides of the page are on screen: past them it cannot be dragged. */
@@ -202,9 +268,8 @@
   $effect(() => {
     let cancelled = false
     const n = page
-    const backwards = n < previous
+    backwards = n < previous
     previous = n
-    direction = backwards
     failure = undefined
     view = FIT_VIEW
     turnStart = performance.now()
@@ -213,10 +278,10 @@
     // Untracked: this effect must run on a page change, not when a decode arrives
     untrack(() => {
       decoded = undefined
-      // A page turned by a swipe keeps sliding out; any other change shows the page in place
+      // A page turned by a slide keeps sliding; any other change shows the page in place
       if (!leaving) {
-        sliding = false
-        offset = 0
+        place(0, false)
+        hideBeside()
       }
     })
     store.setCurrent(n)
@@ -242,6 +307,7 @@
       clearTimeout(timer)
       // Scaled by CSS until decoded again: smooth, not pixelated
       canvas.style.imageRendering = 'auto'
+      hideBeside()
       if (viewport) timer = setTimeout(() => (viewport = size), 150)
       else viewport = size
     })
@@ -303,7 +369,7 @@
   // While the old page slides out, the new one waits
   $effect(() => {
     if (!leaving && decoded && fit && room) {
-      draw(decoded, fit, view, room, dpr)
+      draw(canvas, decoded, fit, view, room, dpr)
       if (turnPending) {
         turnPending = false
         store.turn = {
@@ -320,11 +386,17 @@
     if (!decoded || !room) return
     const space = { width: room.width / dpr, height: room.height / dpr }
     const n = untrack(() => page)
-    const backwards = untrack(() => direction)
-    store.preload(n, volume.pages.length, backwards, (o) => fitPage(o, space, dpr))
+    const back = untrack(() => backwards)
+    store.preload(n, volume.pages.length, back, (o) => fitPage(o, space, dpr))
   })
 
   $effect(() => () => clearTimeout(leaveTimer))
+
+  // Another reading direction puts other pages on each side
+  $effect(() => {
+    void reading
+    untrack(hideBeside)
+  })
 
   // Touchpad pinch on Linux: WebKitGTK hides it from the page, Rust sends it
   $effect(() => {
@@ -350,7 +422,16 @@
     return () => box.removeEventListener('wheel', wheel)
   })
 
-  function draw(bitmap: ImageBitmap, fit: Size, view: View, room: Size, dpr: number) {
+  /** Draws the visible part of a page on a canvas; `dx` shifts it sideways, in CSS pixels. */
+  function draw(
+    canvas: HTMLCanvasElement,
+    bitmap: ImageBitmap,
+    fit: Size,
+    view: View,
+    room: Size,
+    dpr: number,
+    dx = 0,
+  ) {
     const shown = shownSize(fit, view.zoom)
     const r = visibleRect(view, shown, room)
     // One canvas pixel per screen pixel: the browser must not rescale the page
@@ -367,7 +448,7 @@
     const rect = box.getBoundingClientRect()
     const snap = (start: number, length: number, size: number) =>
       Math.round(start * dpr + (length * dpr - size) / 2) / dpr - start
-    canvas.style.left = `${snap(rect.left, rect.width, r.width)}px`
+    canvas.style.left = `${snap(rect.left, rect.width, r.width) + Math.round(dx * dpr) / dpr}px`
     canvas.style.top = `${snap(rect.top, rect.height, r.height)}px`
     // The size can still be a hair off: nearest-neighbor keeps that from blurring the page
     canvas.style.imageRendering = 'pixelated'
@@ -393,14 +474,10 @@
   onpointerup={pointer}
   onpointercancel={pointer}
 >
-  <canvas
-    bind:this={canvas}
-    width="0"
-    height="0"
-    aria-label="Page {page + 1}"
-    style:transform={offset ? `translateX(${offset}px)` : undefined}
-    style:transition={sliding ? `transform ${SLIDE_MS}ms ease-out` : undefined}
-  ></canvas>
+  <div class="strip" bind:this={strip}>
+    <canvas bind:this={canvas} width="0" height="0" aria-label="Page {page + 1}"></canvas>
+    <canvas bind:this={beside} width="0" height="0" aria-hidden="true"></canvas>
+  </div>
   {#if failure}
     <p class="failure" role="alert">{failure}</p>
   {/if}
@@ -414,6 +491,11 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
+  }
+
+  .strip {
+    position: absolute;
+    inset: 0;
   }
 
   .failure {
