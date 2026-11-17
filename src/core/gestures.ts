@@ -19,11 +19,14 @@
 // on the sides turn the page at once, without waiting to see if a second tap
 // comes.
 //
-// The wheel turns one page per notch on a fitted page. On a zoomed page it
-// scrolls; like the swipe, it turns the page only in a new burst of wheel
-// events that starts at the edge in that direction, so scrolling down to the
-// bottom of a page never runs on into the next one. Ctrl+wheel zooms on the
-// cursor: small steps are how Chromium reports a trackpad pinch.
+// The wheel turns one page per notch on a fitted page. A zoomed page is one the
+// reader is looking at closely, and nothing the wheel or the keys do can take
+// them off it: the wheel and a trackpad's scroll only move it (up and down, and
+// sideways with Shift or a horizontal wheel), however many notches and however
+// long the pauses, and so do the arrows, PageUp, PageDown and Space. The page is
+// changed by leaving the zoom, by the slider, or on touch by a swipe from the
+// edge. Ctrl+wheel zooms on the cursor: small steps are how Chromium reports a
+// trackpad pinch.
 //
 // A trackpad's two-finger scroll is a stream of small wheel events that keeps
 // going after the fingers lift (inertia). One flick turns one page: once it
@@ -36,8 +39,8 @@ import { keyMove, keyPan, keyZoom, tapMove, type Move } from './navigation'
 
 export type Action =
   | { kind: 'move'; move: Move }
-  /** Move a zoomed page by a fraction of the screen; at its edge, do `orMove` instead. */
-  | { kind: 'pan'; fx: number; fy: number; orMove?: Move }
+  /** Move a zoomed page by a fraction of the screen: it stops at its edge. */
+  | { kind: 'pan'; fx: number; fy: number }
   /** Drag a zoomed page by CSS pixels: the page follows the pointer. */
   | { kind: 'drag'; dx: number; dy: number }
   | { kind: 'zoom'; how: 'in' | 'out' | 'fit' }
@@ -82,14 +85,12 @@ export type Context = {
   edges: () => Edges
 }
 
-export type Edges = { left: boolean; right: boolean; top: boolean; bottom: boolean }
+export type Edges = { left: boolean; right: boolean }
 
 /** A stream of wheel events: a flick and its inertia, or a run of notches. */
 type Burst = {
   last: number
   dir: number
-  /** Whether it started where it can turn the page. */
-  atEdge: boolean
   sum: number
   /** It already turned a page: the rest of the stream is its inertia. */
   turned: boolean
@@ -160,7 +161,8 @@ export class GestureEngine {
     if (zoom) return [{ kind: 'zoom', how: zoom }]
     const move = keyMove(key, shift)
     const pan = keyPan(key, shift)
-    if (pan && this.context.zoomed()) return [{ kind: 'pan', fx: pan[0], fy: pan[1], orMove: move }]
+    // On a zoomed page these keys only move it, up to its edge and no further
+    if (pan && this.context.zoomed()) return [{ kind: 'pan', fx: pan[0], fy: pan[1] }]
     return move ? [{ kind: 'move', move }] : []
   }
 
@@ -175,8 +177,14 @@ export class GestureEngine {
           : WHEEL_ZOOM ** (-e.dy / 100)
       return [{ kind: 'zoomAt', factor, x: e.x, y: e.y }]
     }
-    const vertical = Math.abs(e.dy) >= Math.abs(e.dx)
-    const delta = vertical ? e.dy : e.dx
+    if (this.context.zoomed()) {
+      // Only moves the page. Shift turns the wheel sideways, as in browsers
+      this.burst = undefined
+      const [dx, dy] = e.shift && e.dx === 0 ? [e.dy, 0] : [e.dx, e.dy]
+      // Scrolling down shows more of the bottom: the page moves up
+      return dx === 0 && dy === 0 ? [] : [{ kind: 'drag', dx: -dx || 0, dy: -dy || 0 }]
+    }
+    const delta = Math.abs(e.dy) >= Math.abs(e.dx) ? e.dy : e.dx
     if (delta === 0) return []
     const size = Math.abs(delta)
 
@@ -186,7 +194,6 @@ export class GestureEngine {
       b = this.burst = {
         last: e.t,
         dir: Math.sign(delta),
-        atEdge: !this.context.zoomed() || this.wheelAtEdge(vertical, delta),
         sum: 0,
         turned: false,
         smooth: false,
@@ -216,8 +223,6 @@ export class GestureEngine {
       }
     }
 
-    // Scrolling down shows more of the bottom: the page moves up
-    if (!b.atEdge) return [{ kind: 'drag', dx: -e.dx, dy: -e.dy }]
     const move = delta > 0 ? 'next' : 'previous'
     if (notch) {
       // The rest of a fast flick that began with a big step is not a new notch
@@ -251,13 +256,6 @@ export class GestureEngine {
     this.pinchScale = e.scale
     if (!Number.isFinite(factor) || factor <= 0 || factor === 1) return []
     return [{ kind: 'zoomAt', factor, x: e.x, y: e.y }]
-  }
-
-  /** Whether a zoomed page already shows its edge in the wheel's direction. */
-  private wheelAtEdge(vertical: boolean, delta: number) {
-    const edges = this.context.edges()
-    if (vertical) return delta > 0 ? edges.bottom : edges.top
-    return delta > 0 ? edges.right : edges.left
   }
 
   private pointer(e: PointerInput): Action[] {

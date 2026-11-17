@@ -22,6 +22,8 @@ export type WheelInput = Timed & {
   dx: number
   dy: number
   ctrl: boolean
+  /** Shift held: the wheel moves a zoomed page sideways. Recordings made before it lack it. */
+  shift?: boolean
   x: number
   y: number
 }
@@ -82,6 +84,7 @@ export function fromWheel(e: WheelEvent, area: DOMRect, t0: number): WheelInput 
     dx: round(e.deltaX * unit),
     dy: round(e.deltaY * unit),
     ctrl: e.ctrlKey,
+    shift: e.shiftKey,
     x: round(e.clientX - area.left),
     y: round(e.clientY - area.top),
   }

@@ -158,14 +158,12 @@
 
   /** Which sides of the page are on screen: past them it cannot be dragged. */
   export function edges(): Edges {
-    if (!fit || !room) return { left: true, right: true, top: true, bottom: true }
+    if (!fit || !room) return { left: true, right: true }
     const shown = shownSize(fit, view.zoom)
     const r = visibleRect(view, shown, room)
     return {
       left: r.x === 0,
       right: r.x + r.width === shown.width,
-      top: r.y === 0,
-      bottom: r.y + r.height === shown.height,
     }
   }
 
