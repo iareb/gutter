@@ -115,7 +115,7 @@ Every page is drawn from the original image, at the screen's physical resolution
 4. **Draw.** On a `<canvas>` with a 2D context ([`canvas-vs-img` benchmark](spikes/canvas-vs-img.md)), with exact dimensions, so the browser does not rescale again. Centering alone is not enough: with fractional pixel densities the element lands on fractional positions and the browser resamples it (1.6–3.5% of pixels changed at density 2.8125 and similar). The element is placed on whole physical pixels, its CSS size rounded up to the browser's 1/64 px unit, and drawn with `image-rendering: pixelated`, which is safe at 1:1.
 5. **Re-render after zoom.** During the pinch, use a CSS transform (fast but approximate); once the gesture ends, redraw at the new resolution.
 
-For very large pages (scans over ~8000 px per side), high zoom uses tiled rendering: only the visible portion is decoded and drawn. An 8000 × 6000 page decoded in full takes about 190 MB, more than the entire mobile budget.
+For very large pages (scans over ~8000 px per side), high zoom was meant to use tiled rendering: only the visible portion decoded and drawn. An 8000 × 6000 page decoded in full takes about 190 MB, more than the entire mobile budget. *Revised in M3 (step 3.1):* the webview decodes the whole image even to cut a tile from it, so tiles would not lower the peak; such pages are decoded whole for now, and a region decode in Rust is left for after 0.1.
 
 Formats: JPEG (including progressive and CMYK), PNG and WebP decode correctly in all webviews. AVIF does not: it works on WebView2 and Android but not on Ubuntu's WebKitGTK ([`image-formats` spike](spikes/image-formats.md)). Support depends on how each webview is built, so it is detected at runtime, not assumed per platform: if the webview fails to decode a page, the UI asks Rust for the same page as PNG (`page://<volume>/<n>/png`) and keeps those bytes for later re-renders. Rust decodes AVIF with `avif-decode` (pure Rust, BSD, built on rav1d), compiled only on Linux, the only platform that needs it so far; other formats have no fallback decoder and show a clear error. JPEG XL is not supported for now (WebView2 cannot decode it); the same fallback could cover it later.
 
@@ -160,7 +160,7 @@ The app has two screens: **Library** and **Reader**. While reading, the interfac
 - A bottom bar with a page slider with previews and the page number comes later; whether it is always there or on demand is decided then.
 - Tap zones on the sides: left and right 25% of the screen, swapped in manga mode.
 - Modes: single page, double page (with single cover and detection of pages that are already spreads), continuous vertical scroll.
-- Fit: to width, to height, to screen.
+- Fit: to screen in the page modes; to width in vertical scroll, where it is the point (decided in the M3 plan: a page taller than the screen in a page mode would act as a zoomed one, which the wheel and the keys cannot turn).
 
 **Library**
 
@@ -179,11 +179,12 @@ The app has two screens: **Library** and **Reader**. While reading, the interfac
 
 Only the pages around the current one are kept decoded in memory; everything else stays compressed in the archive.
 
-- **Preload window:** current page + 2 next + 1 previous (in double page mode, by pairs).
-- **Memory budget in bytes, not pages:** each bitmap costs width × height × 4 bytes. The budget is configurable, with a lower default on mobile; if a new page exceeds it, the farthest page is freed with `ImageBitmap.close()`, and if the budget cannot fit the whole preload window, the window shrinks (never the quality of the current page).
+- **Preload window:** current page + 2 next + 1 previous, the other way round after going back (in double page mode, by pairs). Decoded pages are kept for the current page, 2 behind and 3 ahead; farther ones are closed.
+- **Memory budget in bytes, not pages:** each bitmap costs width × height × 4 bytes. The budget is configurable, with a lower default on mobile (192 MB on a computer, 96 MB on a phone, counting the compressed bytes too); if a new page exceeds it, the farthest page is freed with `ImageBitmap.close()`, and if the budget cannot fit the whole preload window, the window shrinks (never the quality of the current page).
 - **Two cache levels:** compressed bytes (small, we keep many) and decoded bitmaps (large, only around the current page).
 - **Read the archive without extracting it all:** Rust reads only the requested page's entry from the ZIP index.
-- **Work off the main thread:** extraction in Rust on separate threads, asynchronous decoding in the webview, so the interface never freezes while flipping pages.
+- **Work off the main thread:** extraction in Rust on separate threads, asynchronous decoding in the webview, so the interface never freezes while flipping pages. A Worker for the downscale was measured and does not help (M3, [`page-memory` spike](spikes/page-memory.md)).
+- **How a page is made matters more than its size:** drawing the full page on an accelerated canvas leaves it in the graphics memory. Every page is made on a canvas in main memory instead: on a phone a page that is not ready takes about 0.7 s instead of 0.1 s, and the graphics memory stays flat (334 MB at the peak of a fast session against 774 MB).
 - **Thumbnails:** generated once, saved to disk as WebP, lazy-loaded while scrolling the library.
 
 Measurable targets:
@@ -192,7 +193,7 @@ Measurable targets:
 | --- | --- |
 | Opening a 100 MB CBZ to the first page | < 500 ms on desktop |
 | Page change with a preloaded page | < 16 ms (one frame) |
-| Viewer memory with a 200-page volume | < 300 MB on desktop, < 150 MB on mobile |
+| Viewer memory while reading a 116 MB volume, above the idle app | < 200 MB on desktop, < 150 MB on mobile (revised in M3: the webview alone takes 148 MB on Windows and 172 MB on the phone; measured +164 MB and +63 to +133 MB) |
 | Desktop installer size | < 15 MB |
 
 ## Build, distribution and CI
@@ -279,7 +280,7 @@ We start with the viewer, because that's where all the problems of existing read
 **Revision at the end of M1.** M0 to M1 took about 9 days instead of 2–4 weeks, with more than the assumed 10 hours a week of validation. Writing code was not the bottleneck; finding problems on real devices was. Every step of M1 hit something only a device showed: moire at the phone's real downscale ratio, fractional pixel densities resampling the page, Vite reloading the page on Android, quick taps lost to double-tap detection. So the revision keeps the device-heavy milestones wide:
 
 - **M2** shrinks less than the pace suggests: gestures must be tuned by hand on each device, and Windows trackpad pinch cannot be tested yet (no laptop with a trackpad).
-- **M3** stays as it was: preloading and the memory budget start from measurements that are already over target (about 430 MB of webview memory on Windows after the M1 checklist, against 300 MB), and a page change on the phone takes 300–400 ms.
+- **M3** stays as it was in the table, but is the biggest piece left (ten steps, see the roadmap): preloading and the memory budget start from measurements that are already over target (about 430 MB of webview memory on Windows after the M1 checklist, against 300 MB), and a page change on the phone takes 300–400 ms. *Update during M3:* after steps 3.1 to 3.3 a preloaded page changes in under 2 ms and the memory is within the restated targets; step 3.9 (tiles) is dropped, so M3 has nine steps instead of ten, three of them done.
 - **M4** shrinks: a cover grid and SQLite are well-trodden ground.
 - **M5** stays: the CBR library choice (`unrar` or libarchive) and building it for Android are still open. *Update during M2:* CBR moves to its own milestone, M2.5, before M3, with a spike first; M5 keeps image folders and the release. The order changes, not the total.
 
@@ -291,5 +292,5 @@ Open questions:
 - [x] License: **MIT**
 - [x] Rendering on `<canvas>` or `<img>`: **`<canvas>` with a 2D context** ([`canvas-vs-img` benchmark](spikes/canvas-vs-img.md)): an `<img>` either lets the browser downscale, leaving moire, or needs the page re-encoded as PNG, up to 25 times slower
 - [x] CBR library: **`rars`** (pure Rust, Apache-2.0), chosen by the [`cbr-library` spike](spikes/cbr-library.md). The UnRAR license is not an open-source license (F-Droid treats apps bundling it as non-free) and its bindings do not build for Android from Windows; libarchive was not tried, as it needs a C build for every Android target. UnRAR could come back as an optional feature if truncated archives turn out to matter
-- [ ] Default memory budget on mobile: set from the M0.5 and M3 measurements
+- [x] Default memory budget on mobile: **96 MB** (192 MB on a computer), set from the M3 measurements ([`page-memory` spike](spikes/page-memory.md))
 - [ ] Apple Developer account for iOS: yes or no

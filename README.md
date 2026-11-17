@@ -22,6 +22,7 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 - Turn pages with the arrow keys, Page Up/Down, Space, Home and End, or by tapping or clicking the left and right side of the page
 - Zoom up to 8× and pan: pinch, double tap or double click, Ctrl+wheel, keys `+` `-` `0`; the page is redrawn sharp at every zoom
 - A slider in the options bar to go to any page; a zoomed page stays put: neither the wheel nor the arrows turn it, they only move it
+- The pages around the current one are prepared in advance, within a memory budget: the next page is on screen at once, and memory stays flat over a long reading session
 - Swipe to turn the page (it follows your finger), one page per mouse notch and one per trackpad flick, even with its inertia
 - Pages in natural order (`page 2` before `page 10`), junk files skipped
 - JPEG, PNG, WebP and AVIF pages; AVIF is decoded in Rust where the system webview can't (Linux)
@@ -29,19 +30,16 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 
 ## Planned features
 
-- Zoom and pan with pinch, double tap and trackpad, with gestures that never turn a page by accident
-
-- CBZ, CBR and image folders (JPEG, PNG, WebP, AVIF)
-- Single page, double page and vertical scroll (webtoon) modes
+- Image folders (JPEG, PNG, WebP, AVIF)
+- Double page and vertical scroll (webtoon) modes
 - Left-to-right and right-to-left (manga) reading
-- Preloading of the pages around the current one, within a memory limit
 - Library with covers and saved reading position
 
 Built with [Tauri 2](https://tauri.app), [Svelte 5](https://svelte.dev), TypeScript and Rust. See the [design document](docs/design.md) for the full plan.
 
 ## Development
 
-See [docs/setup.md](docs/setup.md) to set up Windows, Linux or Android and run the app.
+See [docs/setup.md](docs/setup.md) to set up Windows, Linux or Android and run the app. Development builds show a small overlay with the page cache and how long the last page change took; in a release build, set `gutter.stats` to `1` in the page's `localStorage` and reload to see it.
 
 ## License
 
