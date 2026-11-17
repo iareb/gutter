@@ -26,11 +26,32 @@
     return () => clearTimeout(timer)
   })
 
+  /**
+   * The page the slider shows while it is being dragged, counted from 1. The page itself changes
+   * when the slider stops for a moment or is let go: in a solid archive every far jump is a pass
+   * over the archive, and loading the pages the slider goes through would be a waste.
+   */
+  let target = $state<number>()
+  let commitTimer: ReturnType<typeof setTimeout> | undefined
+  const SLIDER_PAUSE_MS = 250
+
+  function slide(value: number) {
+    target = value
+    clearTimeout(commitTimer)
+    commitTimer = setTimeout(() => commit(value), SLIDER_PAUSE_MS)
+  }
+
+  function commit(value: number) {
+    clearTimeout(commitTimer)
+    target = undefined
+    if (volume) page = Math.min(Math.max(value, 1), volume.pages.length) - 1
+  }
+
   // All input goes through the gesture engine as normalized events
   const engine = new GestureEngine({
     width: () => viewer?.area().width ?? 0,
     zoomed: () => viewer?.zoomed() ?? false,
-    edges: () => viewer?.edges() ?? { left: true, right: true, top: true, bottom: true },
+    edges: () => viewer?.edges() ?? { left: true, right: true },
   })
 
   async function pick() {
@@ -63,8 +84,8 @@
       case 'move':
         return go(action.move)
       case 'pan':
-        // A zoomed page moves first; at its edge the same key turns the page
-        if (!viewer?.pan(action.fx, action.fy) && action.orMove) go(action.orMove)
+        // A zoomed page moves up to its edge, and stays on the same page
+        viewer?.pan(action.fx, action.fy)
         return
       case 'zoom':
         return viewer?.zoomBy(action.how)
@@ -101,6 +122,8 @@
 
   function onkeydown(event: KeyboardEvent) {
     if (!volume || event.ctrlKey || event.altKey || event.metaKey) return
+    // The arrows of a slider that has the focus move the slider, not the page
+    if ((event.target as HTMLElement | null)?.tagName === 'INPUT') return
     if (input(fromKey(event, 0))) event.preventDefault()
   }
 
@@ -144,7 +167,23 @@
   <header>
     <button onclick={pick} disabled={busy}>Open comic…</button>
     {#if volume}
-      <span class="title">{title ?? 'Comic'} · {page + 1} / {volume.pages.length}</span>
+      <span class="title">{title ?? 'Comic'} · {target ?? page + 1} / {volume.pages.length}</span>
+      {#if volume.pages.length > 1}
+        <input
+          class="slider"
+          type="range"
+          min="1"
+          max={volume.pages.length}
+          value={target ?? page + 1}
+          aria-label="Go to page"
+          oninput={(event) => slide(event.currentTarget.valueAsNumber)}
+          onchange={(event) => {
+            commit(event.currentTarget.valueAsNumber)
+            // Otherwise the arrows and Space would move the slider instead of turning pages
+            event.currentTarget.blur()
+          }}
+        />
+      {/if}
     {/if}
     <div class="options">
       {#if slow}<small>Loading page {page + 1}…</small>{/if}
@@ -185,7 +224,8 @@
   header {
     display: flex;
     flex: none;
-    gap: 16px;
+    flex-wrap: wrap;
+    gap: 8px 16px;
     align-items: center;
     padding: 10px 16px;
     background: #18181c;
@@ -196,6 +236,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* Takes what the bar has left; on a narrow screen it drops to a row of its own */
+  .slider {
+    flex: 1 1 160px;
+    min-width: 120px;
+    height: 32px;
+    margin: 0;
+    accent-color: #8a9bff;
   }
 
   /* Whatever options the bar gets stay on the right */
