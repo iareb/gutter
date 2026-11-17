@@ -8,6 +8,16 @@ const canvas = (size: Size) => {
   return c
 }
 
+/**
+ * The canvases of the downscale live in main memory (willReadFrequently). On an
+ * accelerated canvas, drawing the full-size page uploads it to the graphics
+ * memory as a texture, and that memory stays taken: on the phone a session of
+ * jumps and fast flipping reached 774 MB with it and 327 MB without. The price
+ * is time on the phone, about 0.7 s a page instead of 0.1 s, which preloading
+ * hides while reading (docs/spikes/page-memory.md).
+ */
+const context = (c: HTMLCanvasElement) => c.getContext('2d', { willReadFrequently: true })!
+
 /** Frees a canvas' pixels now instead of waiting for garbage collection. */
 const release = (c: HTMLCanvasElement) => {
   c.width = 0
@@ -30,7 +40,7 @@ export async function decode(blob: Blob, target: Size): Promise<ImageBitmap> {
   let previous: HTMLCanvasElement | undefined
   for (const size of steps) {
     const step = canvas(size)
-    const ctx = step.getContext('2d')!
+    const ctx = context(step)
     ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(source, 0, 0, size.width, size.height)
     if (previous) release(previous)

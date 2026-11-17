@@ -4,10 +4,23 @@
   import { fromKey, type InputEvent, type Recording } from './core/input'
   import { GestureEngine, type Action } from './core/gestures'
   import { movePage, type Move } from './core/navigation'
-  import { fileName, openVolume, type Volume } from './core/volume'
+  import { defaultBudget } from './core/budget'
+  import { PageStore } from './core/pages'
+  import { fileName, openVolume, pageLoaders, type Volume } from './core/volume'
   import PageView from './PageView.svelte'
+  import Stats from './Stats.svelte'
 
   let volume = $state<Volume>()
+  /** Fetches, decodes and keeps the pages of the open volume. */
+  let store = $state.raw<PageStore>()
+  /** The development overlay: always in development builds, in release when localStorage asks. */
+  const stats = (() => {
+    try {
+      return import.meta.env.DEV || localStorage.getItem('gutter.stats') === '1'
+    } catch {
+      return false
+    }
+  })()
   let title = $state<string>()
   let error = $state<string>()
   let busy = $state(false)
@@ -60,10 +73,15 @@
     busy = true
     error = undefined
     try {
-      volume = await openVolume(path)
+      const opened = await openVolume(path)
+      store?.dispose()
+      store = new PageStore(pageLoaders(opened), defaultBudget())
+      volume = opened
       title = fileName(path)
       page = 0
     } catch (e) {
+      store?.dispose()
+      store = undefined
       volume = undefined
       error = String(e)
     } finally {
@@ -196,14 +214,16 @@
 
   {#if error}
     <p class="error" role="alert">{error}</p>
-  {:else if volume}
+  {:else if volume && store}
     <PageView
       bind:this={viewer}
       {volume}
+      {store}
       {page}
       oninput={input}
       onloading={(value) => (loading = value)}
     />
+    {#if stats}<Stats {store} />{/if}
   {:else}
     <p class="empty">gutter</p>
   {/if}
@@ -211,6 +231,7 @@
 
 <style>
   main {
+    position: relative;
     display: flex;
     flex-direction: column;
     box-sizing: border-box;

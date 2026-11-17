@@ -1,5 +1,7 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import { decode } from './decode'
 import type { Size } from './fit'
+import type { Loaders } from './pages'
 
 export type Volume = {
   id: number
@@ -47,6 +49,22 @@ async function fetchPage(url: string): Promise<PageData> {
   const height = Number(response.headers.get('x-page-height'))
   const bytes = await response.blob()
   return width && height ? { bytes, size: { width, height } } : { bytes }
+}
+
+/** What the page store needs to fetch and decode the pages of a volume. */
+export function pageLoaders(volume: Volume): Loaders {
+  return {
+    load: (n) => loadPage(volume, n),
+    convert: (n) => loadConvertedPage(volume, n),
+    decode,
+    probe: async (blob) => {
+      const bitmap = await createImageBitmap(blob).catch(() => undefined)
+      if (!bitmap) return undefined
+      const size = { width: bitmap.width, height: bitmap.height }
+      bitmap.close()
+      return size
+    },
+  }
 }
 
 /**

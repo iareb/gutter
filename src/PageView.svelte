@@ -1,13 +1,14 @@
 <script lang="ts">
   // Shows one page at the screen's physical resolution, fitted or zoomed. The
-  // page bytes are fetched once; the page is decoded at the size it is shown
-  // (never above the original) and only the visible part is drawn, one canvas
-  // pixel per screen pixel. Panning redraws from the same decoded page; zooming,
-  // resizing the window or moving it to a screen with another pixel density
-  // decodes again. A page that cannot be shown gets a message in its place, and
-  // the other pages stay readable.
+  // page store (core/pages.ts) fetches and decodes it, and has usually done so
+  // already for the pages around the current one: a page that is ready is drawn
+  // at once. The page is decoded at the size it is shown (never above the
+  // original) and only the visible part is drawn, one canvas pixel per screen
+  // pixel. Panning redraws from the same decoded page; zooming, resizing the
+  // window or moving it to a screen with another pixel density decodes again.
+  // A page that cannot be shown gets a message in its place, and the other pages
+  // stay readable.
   import { untrack } from 'svelte'
-  import { decode } from './core/decode'
   import type { Edges } from './core/gestures'
   import { fitPage, type Size } from './core/fit'
   import { listen } from '@tauri-apps/api/event'
@@ -29,10 +30,13 @@
     zoomView,
     type View,
   } from './core/view'
-  import { loadConvertedPage, loadPage, type PageData, type Volume } from './core/volume'
+  import type { PageStore } from './core/pages'
+  import type { Volume } from './core/volume'
 
   type Props = {
     volume: Volume
+    /** Fetches, decodes and keeps the pages of the volume. */
+    store: PageStore
     /** Counted from 0. */
     page: number
     /** Every pointer and wheel event on the page, normalized. */
@@ -40,20 +44,18 @@
     /** Tells when the bytes of the page are being fetched: a page in a solid archive can take a while. */
     onloading?: (loading: boolean) => void
   }
-  let { volume, page, oninput, onloading }: Props = $props()
+  let { volume, store, page, oninput, onloading }: Props = $props()
 
   let box: HTMLDivElement
   let canvas: HTMLCanvasElement
   /** Available space, in CSS pixels. */
   let viewport = $state<Size>()
   let dpr = $state(devicePixelRatio)
-  // Raw: a converted page replaces the bytes in place, without rendering again
-  let data = $state.raw<PageData>()
   /** Size of the original image. */
   let original = $state.raw<Size>()
   let view = $state.raw<View>(FIT_VIEW)
   const zoom = $derived(view.zoom)
-  /** The page decoded for the current zoom, kept while panning. */
+  /** The page decoded for the current zoom, kept while panning. Owned by the store: never closed here. */
   let decoded = $state.raw<ImageBitmap>()
   /** Why the current page cannot be shown. */
   let failure = $state<string>()
@@ -67,6 +69,14 @@
   /** The old page is sliding out: the new one is drawn once it is gone. */
   let leaving = $state(false)
   let leaveTimer: ReturnType<typeof setTimeout> | undefined
+  /** For the page-turn time shown by the development overlay. */
+  let turnStart = 0
+  let leaveEnd = 0
+  let turnReady: boolean | undefined
+  let turnPending = false
+  let previous = 0
+  /** Whether the reader is going back: the pages behind are then prepared first. */
+  let direction = false
 
   /** The space for the page in whole physical pixels: it must never need rescaling to fit. */
   const room = $derived(
@@ -82,7 +92,7 @@
       : undefined,
   )
 
-  const loading = $derived(!data && !failure)
+  const loading = $derived(!original && !failure)
   $effect(() => onloading?.(loading))
 
   const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -93,16 +103,12 @@
     canvas.width = 0
   }
 
-  function setDecoded(bitmap: ImageBitmap | undefined) {
-    decoded?.close()
-    decoded = bitmap
-  }
-
   /**
    * Moves a zoomed page by a fraction of the screen. Returns false when there is
    * nothing to move (fitted page, or already at the edge in that direction).
    */
   export function pan(fx: number, fy: number): boolean {
+    store.busy()
     if (!fit || !room || view.zoom === 1) return false
     const shown = shownSize(fit, view.zoom)
     const next = panView(view, fx * room.width, fy * room.height, shown, room)
@@ -113,18 +119,21 @@
 
   /** Drags a zoomed page by CSS pixels: the page follows the pointer. */
   export function drag(dx: number, dy: number) {
+    store.busy()
     if (!fit || !room || view.zoom === 1) return
     view = panView(view, -dx * dpr, -dy * dpr, shownSize(fit, view.zoom), room)
   }
 
   /** Zooms keeping the page point at (x, y), CSS pixels in the page area, still. */
   export function zoomAt(factor: number, x: number, y: number) {
+    store.busy()
     if (!fit || !room) return
     view = zoomAround(view, factor, { x: x * dpr, y: y * dpr }, fit, room)
   }
 
   /** Shows the page shifted sideways by `dx` CSS pixels: it follows the finger. */
   export function follow(dx: number) {
+    store.busy()
     if (leaving) return
     sliding = false
     // On a whole physical pixel, like the page itself
@@ -148,6 +157,7 @@
     offset = direction * box.getBoundingClientRect().width
     clearTimeout(leaveTimer)
     leaveTimer = setTimeout(() => {
+      leaveEnd = performance.now()
       // Not decoded yet: the canvas still holds the old page, which must not come back
       if (!decoded) canvas.width = 0
       sliding = false
@@ -177,6 +187,7 @@
   function pointer(event: PointerEvent) {
     // A mouse moving without a button pressed is not part of a gesture
     if (event.type === 'pointermove' && event.pointerType === 'mouse' && !event.buttons) return
+    store.busy()
     const e = fromPointer(event, box.getBoundingClientRect(), 0)
     if (e) oninput(e)
   }
@@ -187,26 +198,38 @@
     view = clampView(next, shownSize(fit, next.zoom), room)
   }
 
-  // A new page: fetch its bytes, start fitted
+  // A new page: use what the store has of it, start fitted
   $effect(() => {
     let cancelled = false
-    data = undefined
-    original = undefined
+    const n = page
+    const backwards = n < previous
+    previous = n
+    direction = backwards
     failure = undefined
     view = FIT_VIEW
+    turnStart = performance.now()
+    turnReady = undefined
+    turnPending = true
     // Untracked: this effect must run on a page change, not when a decode arrives
     untrack(() => {
-      setDecoded(undefined)
+      decoded = undefined
       // A page turned by a swipe keeps sliding out; any other change shows the page in place
       if (!leaving) {
         sliding = false
         offset = 0
       }
     })
-    loadPage(volume, page).then(
-      (loaded) => !cancelled && (data = loaded),
-      (e) => !cancelled && fail(e),
-    )
+    store.setCurrent(n)
+    // Known: the page is drawn in this same turn if its bitmap is ready too
+    // (A local: reading `original` back here would make this effect depend on what it writes)
+    const known = store.peekSize(n)
+    original = known
+    if (!known) {
+      store.size(n).then(
+        (size) => !cancelled && (original = size),
+        (e) => !cancelled && fail(e),
+      )
+    }
     return () => (cancelled = true)
   })
 
@@ -237,34 +260,29 @@
     return () => query.removeEventListener('change', update)
   })
 
-  // The original size: from Rust's header, or by decoding once
-  $effect(() => {
-    if (!data) return
-    let cancelled = false
-    measure(data).then(
-      (size) => !cancelled && (original = size),
-      (e) => !cancelled && fail(e),
-    )
-    return () => (cancelled = true)
-  })
-
   // Decode for the current fit and zoom
   $effect(() => {
-    if (!data || !original || !fit) return
+    if (!original || !fit) return
     const shown = shownSize(fit, zoom)
     // Past the original's own pixels there is nothing more to decode: drawing scales it up
     const target = {
       width: Math.max(Math.min(shown.width, original.width), 1),
       height: Math.max(Math.min(shown.height, original.height), 1),
     }
-    const pageData = data
+    const n = page
+    const ready = store.peek(n, target)
+    turnReady ??= !!ready
+    if (ready) {
+      decoded = ready
+      return
+    }
     let cancelled = false
     // The first decode of a page starts at once. A new zoom waits until it stops
     // changing: during a pinch the page is scaled from the decode it already has
     const delay = untrack(() => decoded) ? 150 : 0
     const timer = setTimeout(() => {
-      decodePage(pageData, target).then(
-        (bitmap) => (cancelled ? bitmap.close() : setDecoded(bitmap)),
+      store.bitmap(n, target).then(
+        (bitmap) => !cancelled && (decoded = bitmap),
         (e) => !cancelled && fail(e),
       )
     }, delay)
@@ -284,7 +302,26 @@
   // Draw the visible part: on every pan, and whenever a new decode arrives.
   // While the old page slides out, the new one waits
   $effect(() => {
-    if (!leaving && decoded && fit && room) draw(decoded, fit, view, room, dpr)
+    if (!leaving && decoded && fit && room) {
+      draw(decoded, fit, view, room, dpr)
+      if (turnPending) {
+        turnPending = false
+        store.turn = {
+          page,
+          ms: performance.now() - Math.max(turnStart, leaveEnd),
+          ready: turnReady ?? false,
+        }
+      }
+    }
+  })
+
+  // Once the current page is on screen, get the ones around it ready
+  $effect(() => {
+    if (!decoded || !room) return
+    const space = { width: room.width / dpr, height: room.height / dpr }
+    const n = untrack(() => page)
+    const backwards = untrack(() => direction)
+    store.preload(n, volume.pages.length, backwards, (o) => fitPage(o, space, dpr))
   })
 
   $effect(() => () => clearTimeout(leaveTimer))
@@ -312,33 +349,6 @@
     box.addEventListener('wheel', wheel, { passive: false })
     return () => box.removeEventListener('wheel', wheel)
   })
-
-  async function convert(data: PageData) {
-    const converted = await loadConvertedPage(volume, page)
-    data.bytes = converted.bytes
-    data.size = converted.size
-  }
-
-  async function measure(data: PageData): Promise<Size> {
-    if (data.size) return data.size
-    // No size from Rust: measure by decoding once
-    const probe = await createImageBitmap(data.bytes).catch(() => undefined)
-    if (probe) {
-      const size = { width: probe.width, height: probe.height }
-      probe.close()
-      return size
-    }
-    await convert(data)
-    return data.size!
-  }
-
-  function decodePage(data: PageData, target: Size) {
-    return decode(data.bytes, target).catch(async () => {
-      // The webview cannot decode this page: ask Rust, and keep its PNG for next time
-      await convert(data)
-      return decode(data.bytes, target)
-    })
-  }
 
   function draw(bitmap: ImageBitmap, fit: Size, view: View, room: Size, dpr: number) {
     const shown = shownSize(fit, view.zoom)
