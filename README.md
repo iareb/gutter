@@ -21,6 +21,7 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 - Pages redrawn sharp when the window is resized or the phone rotated
 - Turn pages with the arrow keys, Page Up/Down, Space, Home and End, or by tapping or clicking the left and right side of the page
 - Zoom up to 8× and pan: pinch, double tap or double click, Ctrl+wheel, keys `+` `-` `0`; the page is redrawn sharp at every zoom
+- A slider in the options bar to go to any page; a zoomed page stays put: neither the wheel nor the arrows turn it, they only move it
 - Swipe to turn the page (it follows your finger), one page per mouse notch and one per trackpad flick, even with its inertia
 - Pages in natural order (`page 2` before `page 10`), junk files skipped
 - JPEG, PNG, WebP and AVIF pages; AVIF is decoded in Rust where the system webview can't (Linux)

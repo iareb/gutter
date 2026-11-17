@@ -135,9 +135,9 @@ The module is a state machine with four states: **idle**, **pan**, **pinch**, **
 | Tap on the sides | Previous / next page | No action |
 | Tap in the center | No action: the options bar is always visible | Same |
 | Two-finger trackpad scroll | Accumulates movement; changes page past a threshold, then blocks input until inertia dies out | Pan |
-| Mouse wheel | One notch = one page | Vertical pan; never changes the page, however many notches (planned, M2.6: today a new burst at the edge turns it) |
+| Mouse wheel | One notch = one page | Vertical pan (sideways with Shift or a horizontal wheel); never changes the page, however many notches or pauses |
 | Ctrl + wheel / trackpad pinch | Zoom centered on the cursor | Same |
-| Arrows, space, PgUp/PgDn | Page navigation | Pan in the four directions; never change the page (planned, M2.6: today they turn it at the edge) |
+| Arrows, space, PgUp/PgDn | Page navigation | Pan in the four directions, up to the edge; never change the page. Home and End still go to the first and last page |
 | Mouse drag with the left button (desktop) | Nothing | Pan |
 
 Telling trackpad inertia apart from intentional scrolling is the most delicate part: browsers do not report it. We estimate it from the trend of `deltaY` values (steadily decreasing values = inertia) and from a lockout window after each page change. This is an empirical estimate: thresholds must be tuned on real devices, they cannot be worked out on paper.
@@ -155,6 +155,7 @@ The app has two screens: **Library** and **Reader**. While reading, the interfac
 **Reader**
 
 - An options bar always visible at the top: open a file, title and page number today; settings and the other options go there as they come. It is a bar of its own, not drawn over the page, so it never covers a part of it. A way to hide it for a full-screen page may come as an option.
+- A slider for the page in the bar, to go to any page: while it is dragged it shows the page it would go to, and the page is loaded when it stops for a moment or is let go. On a narrow screen it drops to a row of its own.
 - The rest of the screen is the page, on a black or dark grey background.
 - A bottom bar with a page slider with previews and the page number comes later; whether it is always there or on demand is decided then.
 - Tap zones on the sides: left and right 25% of the screen, swapped in manga mode.
