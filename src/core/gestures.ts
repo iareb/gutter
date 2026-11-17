@@ -35,7 +35,7 @@
 // changing direction. A mouse notch is a single big step after a pause: each
 // one turns a page. A pinch reported natively (Linux) arrives as pinch events.
 import type { InputEvent, PinchInput, PointerInput, WheelInput } from './input'
-import { keyMove, keyPan, keyZoom, tapMove, type Move } from './navigation'
+import { keyMove, keyPan, keyZoom, tapMove, type Direction, type Move } from './navigation'
 
 export type Action =
   | { kind: 'move'; move: Move }
@@ -83,6 +83,8 @@ export type Context = {
   zoomed: () => boolean
   /** Which sides of a zoomed page are on screen: past them it cannot be dragged. */
   edges: () => Edges
+  /** Reading direction: in right to left the sides, the swipes and the arrows are mirrored. */
+  direction?: () => Direction
 }
 
 export type Edges = { left: boolean; right: boolean }
@@ -138,6 +140,10 @@ export class GestureEngine {
 
   constructor(private context: Context) {}
 
+  private get direction(): Direction {
+    return this.context.direction?.() ?? 'ltr'
+  }
+
   /** For tests and debugging. */
   get stateKind() {
     return this.state.kind
@@ -159,7 +165,7 @@ export class GestureEngine {
   private key(key: string, shift: boolean): Action[] {
     const zoom = keyZoom(key)
     if (zoom) return [{ kind: 'zoom', how: zoom }]
-    const move = keyMove(key, shift)
+    const move = keyMove(key, shift, this.direction)
     const pan = keyPan(key, shift)
     // On a zoomed page these keys only move it, up to its edge and no further
     if (pan && this.context.zoomed()) return [{ kind: 'pan', fx: pan[0], fy: pan[1] }]
@@ -335,8 +341,11 @@ export class GestureEngine {
         const fast = Math.abs(dx) / Math.max(e.t - s.t0, 1) >= SWIPE_SPEED
         if (!far || !fast || Math.abs(dx) < Math.abs(dy)) return [{ kind: 'settle' }]
         this.lockedUntil = e.t + TURN_LOCK_MS
-        // Left to right reading: pulling the page to the left brings the next one
-        return [{ kind: 'turn', move: dx < 0 ? 'next' : 'previous' }]
+        // Pulling the page to the left brings the page on its right: the next one in
+        // left-to-right reading, the previous one in right to left
+        const fromRight = dx < 0
+        const next = this.direction === 'ltr' ? fromRight : !fromRight
+        return [{ kind: 'turn', move: next ? 'next' : 'previous' }]
       }
 
       case 'pinch': {
@@ -383,7 +392,7 @@ export class GestureEngine {
       // On a zoomed page the sides do not turn it (design doc: one gesture, one action)
       if (double) return [{ kind: 'zoom', how: 'fit' }]
     } else {
-      const move = tapMove(p.x, this.context.width())
+      const move = tapMove(p.x, this.context.width(), this.direction)
       if (move) return [{ kind: 'move', move }]
       if (double) return [{ kind: 'zoomAt', factor: DOUBLE_TAP_ZOOM, x: p.x, y: p.y }]
     }

@@ -19,6 +19,13 @@ const engine = (zoomed = false, edges: Partial<Edges> = {}) =>
     zoomed: () => zoomed,
     edges: () => ({ ...NO_EDGES, ...edges }),
   })
+const rtlEngine = () =>
+  new GestureEngine({
+    width: () => WIDTH,
+    zoomed: () => false,
+    edges: () => NO_EDGES,
+    direction: () => 'rtl',
+  })
 const run = (e: GestureEngine, events: InputEvent[]): Action[] => events.flatMap((x) => e.feed(x))
 /** The actions without the page following the finger, which come on every move. */
 const discrete = (actions: Action[]) => actions.filter((a) => a.kind !== 'follow')
@@ -506,4 +513,25 @@ describe('recordings', () => {
       expect(discrete(run(e, r.events)).filter((a) => a.kind !== 'settle')).toEqual(expected)
     })
   }
+})
+
+describe('right-to-left reading', () => {
+  it('a swipe to the right goes forward, to the left goes back', () => {
+    expect(swipe(rtlEngine(), drag(100, 300, 150))).toEqual([{ kind: 'turn', move: 'next' }])
+    expect(swipe(rtlEngine(), drag(300, 100, 150))).toEqual([{ kind: 'turn', move: 'previous' }])
+  })
+
+  it('a tap on the left goes forward, on the right goes back', () => {
+    const tap = (x: number) => [finger('down', 0, x), finger('up', 50, x)]
+    expect(run(rtlEngine(), tap(20))).toEqual([{ kind: 'move', move: 'next' }])
+    expect(run(rtlEngine(), tap(380))).toEqual([{ kind: 'move', move: 'previous' }])
+  })
+
+  it('the left arrow goes forward; the wheel and Space are not mirrored', () => {
+    expect(run(rtlEngine(), [key('ArrowLeft')])).toEqual([{ kind: 'move', move: 'next' }])
+    expect(run(rtlEngine(), [key('ArrowRight')])).toEqual([{ kind: 'move', move: 'previous' }])
+    expect(run(rtlEngine(), [key(' ')])).toEqual([{ kind: 'move', move: 'next' }])
+    const notch = { kind: 'wheel', t: 1000, x: 200, y: 300, dx: 0, dy: 100, ctrl: false } as const
+    expect(run(rtlEngine(), [notch])).toEqual([{ kind: 'move', move: 'next' }])
+  })
 })

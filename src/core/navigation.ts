@@ -1,17 +1,31 @@
 /** A page change asked for by the reader. */
 export type Move = 'next' | 'previous' | 'first' | 'last'
 
+/** Reading direction: left to right, or right to left (manga). */
+export type Direction = 'ltr' | 'rtl'
+
+/** The same move seen in a mirror: in right-to-left reading the next page is on the left. */
+const mirror = (move: Move, direction: Direction): Move =>
+  direction === 'ltr' ? move : move === 'next' ? 'previous' : move === 'previous' ? 'next' : move
+
 /**
- * Keyboard shortcuts, for left-to-right reading (manga direction comes in M3).
- * Shift+Space goes back, as in browsers.
+ * Keyboard shortcuts. The left and right arrows follow the reading direction
+ * (in right to left the left arrow goes forward); down, PageDown and Space
+ * always go forward. Shift+Space goes back, as in browsers.
  */
-export function keyMove(key: string, shift = false): Move | undefined {
+export function keyMove(
+  key: string,
+  shift = false,
+  direction: Direction = 'ltr',
+): Move | undefined {
   switch (key) {
     case 'ArrowRight':
+      return mirror('next', direction)
+    case 'ArrowLeft':
+      return mirror('previous', direction)
     case 'ArrowDown':
     case 'PageDown':
       return 'next'
-    case 'ArrowLeft':
     case 'ArrowUp':
     case 'PageUp':
       return 'previous'
@@ -60,10 +74,30 @@ export function keyZoom(key: string): 'in' | 'out' | 'fit' | undefined {
   }
 }
 
-/** Tap and click zones: the left and right quarter of the page area. */
-export function tapMove(x: number, width: number): Move | undefined {
-  if (x < width * 0.25) return 'previous'
-  if (x >= width * 0.75) return 'next'
+/**
+ * Tap and click zones: the left and right quarter of the page area. In
+ * right-to-left reading the left one goes forward.
+ */
+export function tapMove(x: number, width: number, direction: Direction = 'ltr'): Move | undefined {
+  if (x < width * 0.25) return mirror('previous', direction)
+  if (x >= width * 0.75) return mirror('next', direction)
+}
+
+/**
+ * Which way the page on screen leaves when the reader moves on: -1 to the left,
+ * 1 to the right. The new page comes in from the other side.
+ */
+export function leaveSide(move: 'next' | 'previous', direction: Direction): -1 | 1 {
+  const forward = move === 'next' ? -1 : 1
+  return direction === 'ltr' ? forward : (-forward as -1 | 1)
+}
+
+/**
+ * The page (counted from 0) that sits on the given side of the page on screen:
+ * 1 is the right, -1 the left. It may be out of the volume.
+ */
+export function pageBeside(page: number, side: -1 | 1, direction: Direction): number {
+  return page + (direction === 'ltr' ? side : -side)
 }
 
 /** The page (counted from 0) a move leads to. Stops at the first and last page. */

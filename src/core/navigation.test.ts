@@ -1,5 +1,34 @@
 import { describe, expect, it } from 'vitest'
-import { keyMove, keyPan, keyZoom, movePage, tapMove } from './navigation'
+import { keyMove, keyPan, keyZoom, leaveSide, movePage, pageBeside, tapMove } from './navigation'
+
+describe('right-to-left reading', () => {
+  it('mirrors the left and right arrows, not the others', () => {
+    expect(keyMove('ArrowLeft', false, 'rtl')).toBe('next')
+    expect(keyMove('ArrowRight', false, 'rtl')).toBe('previous')
+    for (const key of ['ArrowDown', 'PageDown', ' '])
+      expect(keyMove(key, false, 'rtl')).toBe('next')
+    for (const key of ['ArrowUp', 'PageUp']) expect(keyMove(key, false, 'rtl')).toBe('previous')
+    expect(keyMove('Home', false, 'rtl')).toBe('first')
+    expect(keyMove('End', false, 'rtl')).toBe('last')
+  })
+
+  it('mirrors the tap zones', () => {
+    expect(tapMove(10, 400, 'rtl')).toBe('next')
+    expect(tapMove(390, 400, 'rtl')).toBe('previous')
+    expect(tapMove(200, 400, 'rtl')).toBeUndefined()
+  })
+
+  it('says which way the page leaves and which page is beside it', () => {
+    expect(leaveSide('next', 'ltr')).toBe(-1)
+    expect(leaveSide('previous', 'ltr')).toBe(1)
+    expect(leaveSide('next', 'rtl')).toBe(1)
+    expect(leaveSide('previous', 'rtl')).toBe(-1)
+    expect(pageBeside(5, 1, 'ltr')).toBe(6)
+    expect(pageBeside(5, -1, 'ltr')).toBe(4)
+    expect(pageBeside(5, 1, 'rtl')).toBe(4)
+    expect(pageBeside(5, -1, 'rtl')).toBe(6)
+  })
+})
 
 describe('keyPan', () => {
   it('moves a zoomed page in the direction of the arrow', () => {
