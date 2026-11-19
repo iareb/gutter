@@ -1,7 +1,7 @@
 import type { Direction } from './navigation'
 
-/** How pages are laid out. Double page and vertical scroll come later in M3. */
-export type Mode = 'single'
+/** How pages are laid out: one at a time, or two side by side. Vertical scroll comes later in M3. */
+export type Mode = 'single' | 'double'
 
 /**
  * The reader's choices that hold for every volume. Kept in the webview's
@@ -11,9 +11,11 @@ export type Mode = 'single'
 export type Settings = {
   direction: Direction
   mode: Mode
+  /** In double page mode, the first page alone: it is the cover. */
+  cover: boolean
 }
 
-export const DEFAULT_SETTINGS: Settings = { direction: 'ltr', mode: 'single' }
+export const DEFAULT_SETTINGS: Settings = { direction: 'ltr', mode: 'single', cover: true }
 
 const KEY = 'gutter.settings'
 
@@ -29,7 +31,8 @@ export function parseSettings(text: string | null): Settings {
   return {
     direction:
       r.direction === 'rtl' || r.direction === 'ltr' ? r.direction : DEFAULT_SETTINGS.direction,
-    mode: r.mode === 'single' ? r.mode : DEFAULT_SETTINGS.mode,
+    mode: r.mode === 'single' || r.mode === 'double' ? r.mode : DEFAULT_SETTINGS.mode,
+    cover: typeof r.cover === 'boolean' ? r.cover : DEFAULT_SETTINGS.cover,
   }
 }
 

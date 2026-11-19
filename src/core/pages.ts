@@ -62,12 +62,15 @@ export type Snapshot = {
 export class PageStore {
   private cache: Cache<Item>
   private sizes = new Map<number, Size>()
+  /** How many decoded pages are kept around the current one: more when pages go in pairs. */
+  private keep = KEEP_DECODED
   private fetching = new Map<number, Promise<PageData>>()
   private decoding = new Map<string, Promise<ImageBitmap>>()
   private measuring = new Map<number, Promise<Size>>()
   private generation = 0
   private busyUntil = 0
   private current = 0
+  private shown = new Set<number>([0])
   private bitmapCount = 0
   private made = 0
   private closed = 0
@@ -108,8 +111,14 @@ export class PageStore {
     this.busyUntil = performance.now() + BUSY_MS
   }
 
-  setCurrent(n: number) {
+  /**
+   * The page being read: the farthest pages from it are dropped first, and it is
+   * never dropped. `with` are the other pages shown with it (double page): for
+   * them too, only the latest size made is kept.
+   */
+  setCurrent(n: number, withPages: readonly number[] = []) {
     this.current = n
+    this.shown = new Set([n, ...withPages])
     this.cache.setCurrent(n)
     this.pruneBitmaps()
   }
@@ -117,9 +126,22 @@ export class PageStore {
   private pruneBitmaps() {
     for (const [key, page] of this.cache.all()) {
       const d = page - this.current
-      if (key.startsWith('b') && (d > KEEP_DECODED.ahead || -d > KEEP_DECODED.behind))
+      if (key.startsWith('b') && (d > this.keep.ahead || -d > this.keep.behind))
         this.cache.delete(key)
     }
+  }
+
+  /** Keeps more or fewer decoded pages around the current one. */
+  setKeep(keep: { ahead: number; behind: number }) {
+    this.keep = keep
+    this.pruneBitmaps()
+  }
+
+  /** Sizes read elsewhere (from the image headers, for double pages), starting at page `from`. */
+  learnSizes(from: number, sizes: readonly (Size | null)[]) {
+    sizes.forEach((size, i) => {
+      if (size && !this.sizes.has(from + i)) this.sizes.set(from + i, size)
+    })
   }
 
   peekSize(n: number): Size | undefined {
@@ -227,7 +249,7 @@ export class PageStore {
     this.made++
     this.bitmapCount++
     this.cache.set(key, n, bitmapBytes(target), { kind: 'bitmap', bitmap })
-    if (n === this.current) this.dropOtherSizes(n, key)
+    if (this.shown.has(n)) this.dropOtherSizes(n, key)
     this.pruneBitmaps()
     return bitmap
   }
@@ -251,8 +273,6 @@ export class PageStore {
     backwards: boolean,
     fitOf: (original: Size) => Size,
   ) {
-    const run = ++this.generation
-    const stale = () => run !== this.generation
     const { ahead, behind } = backwards ? { ahead: PRELOAD.behind, behind: PRELOAD.ahead } : PRELOAD
     const order: number[] = []
     for (let i = 1; i <= Math.max(ahead, behind); i++) {
@@ -261,15 +281,34 @@ export class PageStore {
     }
     // Backwards the pages behind come first
     if (backwards) order.sort((a, b) => Math.abs(a - current) - Math.abs(b - current) || a - b)
-    for (const n of order) {
-      if (n < 0 || n >= count) continue
+    const jobs = order
+      .filter((n) => n >= 0 && n < count)
+      .map((n) => ({
+        n,
+        target: async () => {
+          const raw = fitOf(await this.size(n))
+          return { width: Math.max(raw.width, 1), height: Math.max(raw.height, 1) }
+        },
+      }))
+    return this.prepare(jobs)
+  }
+
+  /**
+   * Gets pages ready in the order given, each at the size `target` says (which
+   * may wait for sizes it needs, or say none). Starting again stops the
+   * previous run; nothing runs while a gesture is going on, and a page that
+   * does not fit in the budget is skipped.
+   */
+  async prepare(jobs: readonly { n: number; target: () => Promise<Size | undefined> }[]) {
+    const run = ++this.generation
+    const stale = () => run !== this.generation
+    for (const { n, target: targetOf } of jobs) {
       try {
         await this.idle(stale)
         if (stale()) return
-        const original = await this.size(n)
+        const target = await targetOf()
         if (stale()) return
-        const raw = fitOf(original)
-        const target = { width: Math.max(raw.width, 1), height: Math.max(raw.height, 1) }
+        if (!target) continue
         // Sizes this page was prepared at before the window changed are of no use
         for (const key of this.cache.keysOf(n)) {
           if (key.startsWith('b') && key !== bitmapKey(n, target)) this.cache.delete(key)

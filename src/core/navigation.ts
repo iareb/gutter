@@ -91,25 +91,3 @@ export function leaveSide(move: 'next' | 'previous', direction: Direction): -1 |
   const forward = move === 'next' ? -1 : 1
   return direction === 'ltr' ? forward : (-forward as -1 | 1)
 }
-
-/**
- * The page (counted from 0) that sits on the given side of the page on screen:
- * 1 is the right, -1 the left. It may be out of the volume.
- */
-export function pageBeside(page: number, side: -1 | 1, direction: Direction): number {
-  return page + (direction === 'ltr' ? side : -side)
-}
-
-/** The page (counted from 0) a move leads to. Stops at the first and last page. */
-export function movePage(move: Move, page: number, count: number): number {
-  switch (move) {
-    case 'next':
-      return Math.min(page + 1, count - 1)
-    case 'previous':
-      return Math.max(page - 1, 0)
-    case 'first':
-      return 0
-    case 'last':
-      return count - 1
-  }
-}

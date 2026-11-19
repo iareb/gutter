@@ -4,13 +4,22 @@ import { DEFAULT_SETTINGS, loadSettings, parseSettings, saveSettings } from './s
 describe('settings', () => {
   it('starts from the defaults', () => {
     expect(parseSettings(null)).toEqual(DEFAULT_SETTINGS)
-    expect(DEFAULT_SETTINGS).toEqual({ direction: 'ltr', mode: 'single' })
+    expect(DEFAULT_SETTINGS).toEqual({ direction: 'ltr', mode: 'single', cover: true })
   })
 
   it('reads what was saved', () => {
     expect(parseSettings('{"direction":"rtl","mode":"single"}')).toEqual({
       direction: 'rtl',
       mode: 'single',
+      cover: true,
+    })
+  })
+
+  it('reads the double page mode and the cover', () => {
+    expect(parseSettings('{"mode":"double","cover":false}')).toEqual({
+      direction: 'ltr',
+      mode: 'double',
+      cover: false,
     })
   })
 
@@ -21,6 +30,7 @@ describe('settings', () => {
     expect(parseSettings('{"direction":"rtl","extra":1}')).toEqual({
       direction: 'rtl',
       mode: 'single',
+      cover: true,
     })
   })
 
@@ -30,8 +40,8 @@ describe('settings', () => {
       getItem: (k: string) => store.get(k) ?? null,
       setItem: (k: string, v: string) => void store.set(k, v),
     }
-    saveSettings({ direction: 'rtl', mode: 'single' }, storage)
-    expect(loadSettings(storage)).toEqual({ direction: 'rtl', mode: 'single' })
+    saveSettings({ direction: 'rtl', mode: 'single', cover: true }, storage)
+    expect(loadSettings(storage)).toEqual({ direction: 'rtl', mode: 'single', cover: true })
     const refusing = {
       getItem: () => {
         throw new Error('denied')

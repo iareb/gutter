@@ -179,6 +179,39 @@ describe('PageStore', () => {
     expect(again).toBeDefined()
   })
 
+  it('prepares the pages it is given, at the sizes they ask for', async () => {
+    const { store, calls } = setup()
+    store.setCurrent(4)
+    await store.prepare([
+      { n: 5, target: async () => ({ width: 100, height: 150 }) },
+      { n: 6, target: async () => undefined },
+      { n: 7, target: async () => ({ width: 90, height: 150 }) },
+    ])
+    expect(calls.decode).toEqual(['100x150', '90x150'])
+    expect(store.cached(5, { width: 100, height: 150 })).toBeDefined()
+  })
+
+  it('keeps more decoded pages when asked to', async () => {
+    const { store } = setup()
+    store.setCurrent(0)
+    await store.bitmap(5, T)
+    expect(store.cached(5, T)).toBeUndefined()
+    store.setKeep({ ahead: 6, behind: 4 })
+    await store.bitmap(5, T)
+    expect(store.cached(5, T)).toBeDefined()
+    store.setKeep({ ahead: 3, behind: 2 })
+    expect(store.cached(5, T)).toBeUndefined()
+  })
+
+  it('learns sizes read elsewhere', async () => {
+    const { store, calls } = setup()
+    store.learnSizes(3, [{ width: 10, height: 20 }, null])
+    expect(store.peekSize(3)).toEqual({ width: 10, height: 20 })
+    expect(store.peekSize(4)).toBeUndefined()
+    expect(await store.size(3)).toEqual({ width: 10, height: 20 })
+    expect(calls.load).toEqual([])
+  })
+
   it('drops everything on dispose', async () => {
     vi.useFakeTimers()
     const { store } = setup()

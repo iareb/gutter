@@ -51,6 +51,20 @@ async function fetchPage(url: string): Promise<PageData> {
   return width && height ? { bytes, size: { width, height } } : { bytes }
 }
 
+/**
+ * Sizes of pages `from` to `to` (excluded), read by Rust from their image
+ * headers: enough to lay out double pages without fetching them. Null where
+ * it cannot be told.
+ */
+export async function pageSizes(
+  volume: Volume,
+  from: number,
+  to: number,
+): Promise<(Size | null)[]> {
+  const sizes = await invoke<([number, number] | null)[]>('page_sizes', { id: volume.id, from, to })
+  return sizes.map((s) => (s ? { width: s[0], height: s[1] } : null))
+}
+
 /** What the page store needs to fetch and decode the pages of a volume. */
 export function pageLoaders(volume: Volume): Loaders {
   return {

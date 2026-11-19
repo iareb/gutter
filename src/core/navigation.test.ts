@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { keyMove, keyPan, keyZoom, leaveSide, movePage, pageBeside, tapMove } from './navigation'
+import { keyMove, keyPan, keyZoom, leaveSide, tapMove } from './navigation'
 
 describe('right-to-left reading', () => {
   it('mirrors the left and right arrows, not the others', () => {
@@ -18,15 +18,11 @@ describe('right-to-left reading', () => {
     expect(tapMove(200, 400, 'rtl')).toBeUndefined()
   })
 
-  it('says which way the page leaves and which page is beside it', () => {
+  it('says which way the page leaves ', () => {
     expect(leaveSide('next', 'ltr')).toBe(-1)
     expect(leaveSide('previous', 'ltr')).toBe(1)
     expect(leaveSide('next', 'rtl')).toBe(1)
     expect(leaveSide('previous', 'rtl')).toBe(-1)
-    expect(pageBeside(5, 1, 'ltr')).toBe(6)
-    expect(pageBeside(5, -1, 'ltr')).toBe(4)
-    expect(pageBeside(5, 1, 'rtl')).toBe(4)
-    expect(pageBeside(5, -1, 'rtl')).toBe(6)
   })
 })
 
@@ -93,28 +89,5 @@ describe('tapMove', () => {
   it('does nothing in the middle', () => {
     expect(tapMove(100, 400)).toBeUndefined()
     expect(tapMove(299, 400)).toBeUndefined()
-  })
-})
-
-describe('movePage', () => {
-  it('moves one page at a time', () => {
-    expect(movePage('next', 3, 20)).toBe(4)
-    expect(movePage('previous', 3, 20)).toBe(2)
-  })
-
-  it('stops at the ends instead of wrapping', () => {
-    expect(movePage('next', 19, 20)).toBe(19)
-    expect(movePage('previous', 0, 20)).toBe(0)
-  })
-
-  it('jumps to the first and last page', () => {
-    expect(movePage('first', 7, 20)).toBe(0)
-    expect(movePage('last', 7, 20)).toBe(19)
-  })
-
-  it('handles a single page', () => {
-    for (const move of ['next', 'previous', 'first', 'last'] as const) {
-      expect(movePage(move, 0, 1)).toBe(0)
-    }
   })
 })
