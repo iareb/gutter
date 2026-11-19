@@ -1,13 +1,16 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core'
+  import { SvelteSet } from 'svelte/reactivity'
   import { open } from '@tauri-apps/plugin-dialog'
   import { fromKey, type InputEvent, type Recording } from './core/input'
   import { GestureEngine, type Action } from './core/gestures'
-  import { leaveSide, movePage, type Direction, type Move } from './core/navigation'
-  import { loadSettings, saveSettings, type Settings } from './core/settings'
+  import { leaveSide, type Direction, type Move } from './core/navigation'
+  import { loadSettings, saveSettings, type Mode, type Settings } from './core/settings'
   import { defaultBudget } from './core/budget'
-  import { PageStore } from './core/pages'
-  import { fileName, openVolume, pageLoaders, type Volume } from './core/volume'
+  import { KEEP_DECODED, PageStore } from './core/pages'
+  import { isWide, Layout, unitLabel, type Unit } from './core/spreads'
+  import type { Size } from './core/fit'
+  import { fileName, openVolume, pageLoaders, pageSizes, type Volume } from './core/volume'
   import PageView from './PageView.svelte'
   import Stats from './Stats.svelte'
 
@@ -34,6 +37,76 @@
   /** Current page, counted from 0. */
   let page = $state(0)
   let viewer = $state<PageView>()
+
+  // Units: the pages shown together (two side by side in double page mode).
+  // In double page mode the sizes of the pages are read from their headers,
+  // from the first page on, and the layout grows as they arrive
+  /** Pages whose size could not be told: they count as narrow. */
+  const unreadable = new SvelteSet<number>()
+  /** Bumped when sizes are learned, so that the layout is built again. */
+  let sizesSeen = $state(0)
+  const layout = $derived.by(() => {
+    void sizesSeen
+    if (!volume || !store) return undefined
+    const s = store
+    return new Layout({
+      count: volume.pages.length,
+      double: settings.mode === 'double',
+      cover: settings.cover,
+      wide: (n) => {
+        const size = s.peekSize(n)
+        return size ? isWide(size) : unreadable.has(n) ? false : undefined
+      },
+    })
+  })
+  /** The unit of the current page, or undefined while its layout is not known. */
+  const unit = $derived(layout?.unitOf(page))
+  /** What is on screen: the last unit known, kept while the next one is being laid out. */
+  let shownUnit = $state.raw<Unit>()
+  $effect(() => {
+    if (unit) shownUnit = unit
+  })
+  // The current page is the first of its unit
+  $effect(() => {
+    if (unit && unit[0] !== page) page = unit[0]
+  })
+
+  $effect(() => {
+    if (!volume || !store || settings.mode !== 'double') return
+    const v = volume
+    const s = store
+    let cancelled = false
+    void (async () => {
+      const RUN = 8
+      for (let from = 0; from < v.pages.length; from += RUN) {
+        const to = Math.min(from + RUN, v.pages.length)
+        const missing = []
+        for (let n = from; n < to; n++) if (!s.peekSize(n) && !unreadable.has(n)) missing.push(n)
+        if (missing.length === 0) continue
+        let sizes: (Size | null)[]
+        try {
+          sizes = await pageSizes(v, from, to)
+        } catch {
+          return
+        }
+        if (cancelled) return
+        s.learnSizes(from, sizes)
+        // No size in the header (a format Rust cannot measure): measured by decoding
+        for (const n of missing) {
+          if (s.peekSize(n)) continue
+          await s.size(n).catch(() => unreadable.add(n))
+          if (cancelled) return
+        }
+        sizesSeen++
+      }
+    })()
+    return () => (cancelled = true)
+  })
+
+  // Pairs need more decoded pages kept around the current one
+  $effect(() => {
+    store?.setKeep(settings.mode === 'double' ? { ahead: 6, behind: 4 } : KEEP_DECODED)
+  })
   /** The page is still being fetched, and has been for a moment: say so. */
   let loading = $state(false)
   let slow = $state(false)
@@ -64,6 +137,7 @@
   function commit(value: number) {
     clearTimeout(commitTimer)
     target = undefined
+    // Any page of a unit: the unit is shown, and the page becomes its first
     if (volume) page = Math.min(Math.max(value, 1), volume.pages.length) - 1
   }
 
@@ -77,6 +151,18 @@
 
   function choose(direction: Direction) {
     settings = { ...settings, direction }
+    menu = false
+    blur()
+  }
+
+  function setMode(mode: Mode) {
+    settings = { ...settings, mode }
+    menu = false
+    blur()
+  }
+
+  function setCover(cover: boolean) {
+    settings = { ...settings, cover }
     menu = false
     blur()
   }
@@ -110,6 +196,8 @@
       const opened = await openVolume(path)
       store?.dispose()
       store = new PageStore(pageLoaders(opened), defaultBudget())
+      unreadable.clear()
+      shownUnit = undefined
       volume = opened
       title = fileName(path)
       page = 0
@@ -132,8 +220,8 @@
    * slide when the new one is ready; to the first or the last, the page changes in place.
    */
   function go(move: Move) {
-    if (!volume) return
-    const next = movePage(move, page, volume.pages.length)
+    if (!layout) return
+    const next = layout.target(page, move)
     if (next === page) return
     if (move === 'next' || move === 'previous') viewer?.leave(leaveSide(move, settings.direction))
     page = next
@@ -164,8 +252,8 @@
 
   /** A swipe turned the page: the old one slides out. On the first or last page it slides back. */
   function turn(move: 'next' | 'previous') {
-    if (!volume) return
-    const next = movePage(move, page, volume.pages.length)
+    if (!layout) return
+    const next = layout.target(page, move)
     if (next === page) return viewer?.settle()
     // The next page comes from the right in left-to-right reading, from the left in right to left
     viewer?.leave(leaveSide(move, settings.direction))
@@ -253,13 +341,42 @@
           </fieldset>
           <fieldset>
             <legend>Pages</legend>
-            <label><input type="radio" name="mode" checked disabled /> One at a time</label>
+            <label>
+              <input
+                type="radio"
+                name="mode"
+                checked={settings.mode === 'single'}
+                onchange={() => setMode('single')}
+              />
+              One at a time
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="mode"
+                checked={settings.mode === 'double'}
+                onchange={() => setMode('double')}
+              />
+              Two side by side
+            </label>
+            <label class:off={settings.mode !== 'double'}>
+              <input
+                type="checkbox"
+                checked={settings.cover}
+                disabled={settings.mode !== 'double'}
+                onchange={(event) => setCover(event.currentTarget.checked)}
+              />
+              First page alone (cover)
+            </label>
           </fieldset>
         </div>
       {/if}
     </div>
     {#if volume}
-      <span class="title">{title ?? 'Comic'} · {target ?? page + 1} / {volume.pages.length}</span>
+      <span class="title"
+        >{title ?? 'Comic'} · {target ?? (unit ? unitLabel(unit) : page + 1)} / {volume.pages
+          .length}</span
+      >
       {#if volume.pages.length > 1}
         <input
           class="slider"
@@ -279,7 +396,7 @@
       {/if}
     {/if}
     <div class="options">
-      {#if slow}<small>Loading page {page + 1}…</small>{/if}
+      {#if slow || (volume && !unit)}<small>Loading page {page + 1}…</small>{/if}
       {#if DEV}
         {#if recordStatus}<small>{recordStatus}</small>{/if}
         <button onclick={toggleRecording}>{recorded ? '■ Stop' : '● Rec'}</button>
@@ -289,12 +406,12 @@
 
   {#if error}
     <p class="error" role="alert">{error}</p>
-  {:else if volume && store}
+  {:else if volume && store && layout && shownUnit}
     <PageView
       bind:this={viewer}
-      {volume}
       {store}
-      {page}
+      unit={shownUnit}
+      {layout}
       reading={settings.direction}
       oninput={input}
       onloading={(value) => (loading = value)}
@@ -385,7 +502,12 @@
     min-height: 32px;
   }
 
-  input[type='radio'] {
+  label.off {
+    opacity: 0.5;
+  }
+
+  input[type='radio'],
+  input[type='checkbox'] {
     margin: 0;
     accent-color: #8a9bff;
   }

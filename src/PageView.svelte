@@ -1,13 +1,15 @@
 <script lang="ts">
-  // Shows one page at the screen's physical resolution, fitted or zoomed. The
-  // page store (core/pages.ts) fetches and decodes it, and has usually done so
-  // already for the pages around the current one: a page that is ready is drawn
-  // at once. The page is decoded at the size it is shown (never above the
-  // original) and only the visible part is drawn, one canvas pixel per screen
-  // pixel. Panning redraws from the same decoded page; zooming, resizing the
-  // window or moving it to a screen with another pixel density decodes again.
-  // A page that cannot be shown gets a message in its place, and the other pages
-  // stay readable.
+  // Shows a unit (one page, or two side by side in double page mode) at the
+  // screen's physical resolution, fitted or zoomed. Two pages are one virtual
+  // page, each scaled to the height of the taller (core/spreads.ts), so zoom and
+  // pan work as on a single page. The page store (core/pages.ts) fetches and
+  // decodes the pages, and has usually done so already for the units around the
+  // current one: a unit that is ready is drawn at once. Each page is decoded at
+  // the size it is shown (never above its original) and only the visible part is
+  // drawn, one canvas pixel per screen pixel. Panning redraws from the same
+  // decoded pages; zooming, resizing the window or moving it to a screen with
+  // another pixel density decodes again. A page that cannot be shown gets a
+  // message in its place, and the other pages stay readable.
   import { untrack } from 'svelte'
   import type { Edges } from './core/gestures'
   import { fitPage, type Size } from './core/fit'
@@ -30,53 +32,71 @@
     zoomView,
     type View,
   } from './core/view'
-  import { pageBeside, type Direction } from './core/navigation'
+  import type { Direction } from './core/navigation'
   import type { PageStore } from './core/pages'
-  import type { Volume } from './core/volume'
+  import {
+    partRects,
+    partTargets,
+    unitLabel,
+    unitSize,
+    type Layout,
+    type Unit,
+  } from './core/spreads'
 
   type Props = {
-    volume: Volume
     /** Fetches, decodes and keeps the pages of the volume. */
     store: PageStore
-    /** Counted from 0. */
-    page: number
-    /** Reading direction: which page sits on which side of this one. */
+    /** The pages shown, counted from 0, in reading order. */
+    unit: Unit
+    /** Which units come before and after this one. */
+    layout: Layout
+    /** Reading direction: which unit sits on which side of this one, and the order of a pair. */
     reading: Direction
     /** Every pointer and wheel event on the page, normalized. */
     oninput: (event: InputEvent) => void
     /** Tells when the bytes of the page are being fetched: a page in a solid archive can take a while. */
     onloading?: (loading: boolean) => void
   }
-  let { volume, store, page, reading, oninput, onloading }: Props = $props()
+  let { store, unit, layout, reading, oninput, onloading }: Props = $props()
 
   let box: HTMLDivElement
   let canvas: HTMLCanvasElement
   /** Available space, in CSS pixels. */
   let viewport = $state<Size>()
   let dpr = $state(devicePixelRatio)
-  /** Size of the original image. */
-  let original = $state.raw<Size>()
+  // A string: a new array with the same pages must not start the unit again
+  const unitKey = $derived(unit.join(','))
+  /** The pages of the unit in reading order. */
+  const pages = $derived(unitKey.split(',').map(Number))
+  /** Their original sizes, once all are known, in reading order. */
+  let sizes = $state.raw<Size[]>()
+  /** Left to right on screen: a pair is read from the right in right-to-left reading. */
+  const onScreen = <T,>(list: readonly T[]) => (reading === 'rtl' ? [...list].reverse() : [...list])
+  const screenPages = $derived(onScreen(pages))
+  const screenSizes = $derived(sizes && onScreen(sizes))
+  /** The unit as one virtual page. */
+  const original = $derived(screenSizes && unitSize(screenSizes))
   let view = $state.raw<View>(FIT_VIEW)
   const zoom = $derived(view.zoom)
-  /** The page decoded for the current zoom, kept while panning. Owned by the store: never closed here. */
-  let decoded = $state.raw<ImageBitmap>()
-  /** Why the current page cannot be shown. */
+  /** The pages decoded for the current zoom, in screen order, kept while panning. Owned by the store. */
+  let decoded = $state.raw<ImageBitmap[]>()
+  /** Why the current unit cannot be shown. */
   let failure = $state<string>()
 
-  // Turning a page slides it out and the next one in beside it, when the next
+  // Turning a page slides it out and the next unit in beside it, when the next
   // one is ready (made in advance); otherwise the page changes in place, and the
   // old page stays on screen until the new one can be drawn: never a blank page.
-  // Both pages sit on a strip that moves sideways: under the finger during a
-  // swipe, by itself for SLIDE_MS when the page turns. The strip is moved here,
-  // not through Svelte, so that a slide cut short by the next one starts from
-  // where the strip really is.
+  // Both sit on a strip that moves sideways: under the finger during a swipe, by
+  // itself for SLIDE_MS when the page turns. The strip is moved here, not
+  // through Svelte, so that a slide cut short by the next one starts from where
+  // the strip really is.
 
   /** How long the pages take to slide. */
   const SLIDE_MS = 200
   /** Space between the page and the one beside it while they slide, in CSS pixels. */
   const GAP = 16
   let strip: HTMLDivElement
-  /** The page beside this one, shown while sliding. */
+  /** The unit beside this one, shown while sliding. */
   let beside: HTMLCanvasElement
   /** Which side it is drawn on: 1 the right, -1 the left, 0 none. */
   let besideSide: -1 | 0 | 1 = 0
@@ -99,10 +119,11 @@
       height: Math.floor(viewport.height * dpr),
     },
   )
-  /** The page fitted to the screen (zoom 1), in physical pixels. */
+  const space = $derived(room && { width: room.width / dpr, height: room.height / dpr })
+  /** The unit fitted to the screen (zoom 1), in physical pixels. */
   const fit = $derived(
-    original && room && room.width > 0 && room.height > 0
-      ? fitPage(original, { width: room.width / dpr, height: room.height / dpr }, dpr)
+    original && room && space && room.width > 0 && room.height > 0
+      ? fitPage(original, space, dpr)
       : undefined,
   )
 
@@ -150,31 +171,55 @@
     strip.style.transform = x ? `translateX(${x}px)` : ''
   }
 
-  /** How far the page beside sits from this one, in CSS pixels. */
+  /** How far the unit beside sits from this one, in CSS pixels. */
   const besideShift = () => box.getBoundingClientRect().width + GAP
 
-  /** Draws the page on the given side of this one, if it is ready. Returns whether it is. */
+  /** The unit on a side of this one: 1 the right, -1 the left. */
+  function unitBeside(side: -1 | 1): Unit | undefined {
+    const forward = (side === 1) === (reading === 'ltr')
+    return forward ? layout.after(pages) : layout.before(pages)
+  }
+
+  /**
+   * A unit at zoom 1, in screen order: its pages' sizes and the size each is
+   * decoded at, the same the preloading uses. Undefined while a size is not known.
+   */
+  function fitted(u: Unit, known: (n: number) => Size | undefined) {
+    if (!space) return undefined
+    const all = u.map(known)
+    if (!all.every(Boolean)) return undefined
+    const screen = onScreen(all as Size[])
+    const unitFit = fitPage(unitSize(screen), space, dpr)
+    return {
+      pages: onScreen(u),
+      sizes: screen,
+      fit: unitFit,
+      targets: partTargets(screen, unitFit),
+    }
+  }
+
+  /** Draws the unit on the given side of this one, if it is ready. Returns whether it is. */
   function showBeside(side: -1 | 1): boolean {
     if (besideSide === side) return true
-    const n = pageBeside(page, side, reading)
-    const size = n >= 0 && n < volume.pages.length ? store.peekSize(n) : undefined
-    const bitmap = size && room && targetOf(n, size)
-    if (!bitmap || !room) {
+    const u = unitBeside(side)
+    const f = u && room && fitted(u, (n) => store.peekSize(n))
+    const bitmaps = f && f.pages.map((n, i) => store.cached(n, f.targets[i]))
+    if (!f || !bitmaps || !bitmaps.every(Boolean) || !room) {
       hideBeside()
       return false
     }
-    draw(beside, bitmap.bitmap, bitmap.fit, FIT_VIEW, room, dpr, side * besideShift())
+    draw(
+      beside,
+      bitmaps as ImageBitmap[],
+      f.sizes,
+      f.fit,
+      FIT_VIEW,
+      room,
+      dpr,
+      side * besideShift(),
+    )
     besideSide = side
     return true
-  }
-
-  /** A page at zoom 1, as the preloading made it. */
-  function targetOf(n: number, size: Size) {
-    const space = { width: room!.width / dpr, height: room!.height / dpr }
-    const f = fitPage(size, space, dpr)
-    const fit = { width: Math.max(f.width, 1), height: Math.max(f.height, 1) }
-    const bitmap = store.cached(n, fit)
-    return bitmap && { bitmap, fit }
   }
 
   function hideBeside() {
@@ -182,13 +227,13 @@
     if (beside) beside.width = 0
   }
 
-  /** Shows the page shifted sideways by `dx` CSS pixels, with the page beside it: it follows the finger. */
+  /** Shows the page shifted sideways by `dx` CSS pixels, with the unit beside it: it follows the finger. */
   export function follow(dx: number) {
     store.busy()
     if (leaving) return
     // On a whole physical pixel, like the page itself
     const x = Math.round(dx * dpr) / dpr
-    // Pulling to the left uncovers the page on the right
+    // Pulling to the left uncovers the unit on the right
     if (x !== 0) showBeside(x < 0 ? 1 : -1)
     place(x, false)
   }
@@ -201,7 +246,7 @@
 
   /**
    * Slides the page out of the screen, to the left (-1) or the right (1), and the
-   * page beside it in, before the page changes. Returns false when that page is
+   * unit beside it in, before the page changes. Returns false when that unit is
    * not ready: then nothing slides, and the page changes in place.
    */
   export function leave(side: -1 | 1): boolean {
@@ -217,7 +262,7 @@
     return true
   }
 
-  /** The end of a slide: the strip back in place, with the new page on it. */
+  /** The end of a slide: the strip back in place, with the new unit on it. */
   function finish() {
     if (!leaving) return
     clearTimeout(leaveTimer)
@@ -228,7 +273,8 @@
     strip.getBoundingClientRect()
     hideBeside()
     // Drawn in this same frame, not after it: the old page must not show again
-    if (decoded && fit && room) draw(canvas, decoded, fit, view, room, dpr)
+    if (decoded && screenSizes && fit && room)
+      draw(canvas, decoded, screenSizes, fit, view, room, dpr)
     else canvas.width = 0
   }
 
@@ -264,18 +310,18 @@
     view = clampView(next, shownSize(fit, next.zoom), room)
   }
 
-  // A new page: use what the store has of it, start fitted
+  // A new unit: use what the store has of it, start fitted
   $effect(() => {
     let cancelled = false
-    const n = page
-    backwards = n < previous
-    previous = n
+    const ps = pages
+    backwards = ps[0] < previous
+    previous = ps[0]
     failure = undefined
     view = FIT_VIEW
     turnStart = performance.now()
     turnReady = undefined
     turnPending = true
-    // Untracked: this effect must run on a page change, not when a decode arrives
+    // Untracked: this effect must run on a new unit, not when a decode arrives
     untrack(() => {
       decoded = undefined
       // A page turned by a slide keeps sliding; any other change shows the page in place
@@ -284,14 +330,15 @@
         hideBeside()
       }
     })
-    store.setCurrent(n)
-    // Known: the page is drawn in this same turn if its bitmap is ready too
-    // (A local: reading `original` back here would make this effect depend on what it writes)
-    const known = store.peekSize(n)
-    original = known
-    if (!known) {
-      store.size(n).then(
-        (size) => !cancelled && (original = size),
+    store.setCurrent(ps[0], ps.slice(1))
+    // Known: the unit is drawn in this same turn if its pages are ready too
+    // (A local: reading `sizes` back here would make this effect depend on what it writes)
+    const known = ps.map((n) => store.peekSize(n))
+    if (known.every(Boolean)) sizes = known as Size[]
+    else {
+      sizes = undefined
+      Promise.all(ps.map((n) => store.size(n))).then(
+        (all) => !cancelled && (sizes = all),
         (e) => !cancelled && fail(e),
       )
     }
@@ -328,27 +375,23 @@
 
   // Decode for the current fit and zoom
   $effect(() => {
-    if (!original || !fit) return
-    const shown = shownSize(fit, zoom)
-    // Past the original's own pixels there is nothing more to decode: drawing scales it up
-    const target = {
-      width: Math.max(Math.min(shown.width, original.width), 1),
-      height: Math.max(Math.min(shown.height, original.height), 1),
-    }
-    const n = page
-    const ready = store.peek(n, target)
-    turnReady ??= !!ready
-    if (ready) {
-      decoded = ready
+    if (!screenSizes || !fit) return
+    // Past a page's own pixels there is nothing more to decode: drawing scales it up
+    const targets = partTargets(screenSizes, shownSize(fit, zoom))
+    const ns = screenPages
+    const ready = ns.map((n, i) => store.peek(n, targets[i]))
+    turnReady ??= ready.every(Boolean)
+    if (ready.every(Boolean)) {
+      decoded = ready as ImageBitmap[]
       return
     }
     let cancelled = false
-    // The first decode of a page starts at once. A new zoom waits until it stops
+    // The first decode of a unit starts at once. A new zoom waits until it stops
     // changing: during a pinch the page is scaled from the decode it already has
     const delay = untrack(() => decoded) ? 150 : 0
     const timer = setTimeout(() => {
-      store.bitmap(n, target).then(
-        (bitmap) => !cancelled && (decoded = bitmap),
+      Promise.all(ns.map((n, i) => store.bitmap(n, targets[i]))).then(
+        (bitmaps) => !cancelled && (decoded = bitmaps),
         (e) => !cancelled && fail(e),
       )
     }, delay)
@@ -368,12 +411,12 @@
   // Draw the visible part: on every pan, and whenever a new decode arrives.
   // While the old page slides out, the new one waits
   $effect(() => {
-    if (!leaving && decoded && fit && room) {
-      draw(canvas, decoded, fit, view, room, dpr)
+    if (!leaving && decoded && screenSizes && fit && room) {
+      draw(canvas, decoded, screenSizes, fit, view, room, dpr)
       if (turnPending) {
         turnPending = false
         store.turn = {
-          page,
+          page: pages[0],
           ms: performance.now() - Math.max(turnStart, leaveEnd),
           ready: turnReady ?? false,
         }
@@ -381,18 +424,37 @@
     }
   })
 
-  // Once the current page is on screen, get the ones around it ready
+  // Once the current unit is on screen, get the ones around it ready: two ahead
+  // and one behind, the other way round when going back
   $effect(() => {
-    if (!decoded || !room) return
-    const space = { width: room.width / dpr, height: room.height / dpr }
-    const n = untrack(() => page)
+    if (!decoded || !space) return
+    const l = layout
+    const u = untrack(() => pages)
     const back = untrack(() => backwards)
-    store.preload(n, volume.pages.length, back, (o) => fitPage(o, space, dpr))
+    const after = l.after(u)
+    const before = l.before(u)
+    const order = back
+      ? [before, before && l.before(before), after]
+      : [after, before, after && l.after(after)]
+    const units = order.filter((x): x is Unit => !!x)
+    const jobs = untrack(() =>
+      units.flatMap((v) =>
+        onScreen(v).map((n, i) => ({
+          n,
+          target: async () => {
+            const all = await Promise.all(v.map((m) => store.size(m)))
+            const f = fitted(v, (m) => all[v.indexOf(m)])
+            return f?.targets[i]
+          },
+        })),
+      ),
+    )
+    store.prepare(jobs)
   })
 
   $effect(() => () => clearTimeout(leaveTimer))
 
-  // Another reading direction puts other pages on each side
+  // Another reading direction puts other units on each side
   $effect(() => {
     void reading
     untrack(hideBeside)
@@ -422,10 +484,14 @@
     return () => box.removeEventListener('wheel', wheel)
   })
 
-  /** Draws the visible part of a page on a canvas; `dx` shifts it sideways, in CSS pixels. */
+  /**
+   * Draws the visible part of a unit on a canvas: `bitmaps` and `sizes` in
+   * screen order, side by side. `dx` shifts it sideways, in CSS pixels.
+   */
   function draw(
     canvas: HTMLCanvasElement,
-    bitmap: ImageBitmap,
+    bitmaps: readonly ImageBitmap[],
+    sizes: readonly Size[],
     fit: Size,
     view: View,
     room: Size,
@@ -453,14 +519,31 @@
     // The size can still be a hair off: nearest-neighbor keeps that from blurring the page
     canvas.style.imageRendering = 'pixelated'
 
-    // The decoded page is the shown size, or smaller while a new decode is on its
-    // way or when zoomed past the original: then the visible part is scaled here
-    const sx = bitmap.width / shown.width
-    const sy = bitmap.height / shown.height
     const ctx = canvas.getContext('2d')!
     ctx.imageSmoothingQuality = 'high'
     ctx.clearRect(0, 0, r.width, r.height)
-    ctx.drawImage(bitmap, r.x * sx, r.y * sy, r.width * sx, r.height * sy, 0, 0, r.width, r.height)
+    // Each page covers its own strip of the unit. Its decode is the strip's size, or
+    // smaller while a new decode is on its way or when zoomed past the original:
+    // then the visible part is scaled here
+    partRects(sizes, shown.width).forEach((part, i) => {
+      const from = Math.max(r.x, part.x)
+      const to = Math.min(r.x + r.width, part.x + part.width)
+      if (to <= from) return
+      const bitmap = bitmaps[i]
+      const sx = bitmap.width / part.width
+      const sy = bitmap.height / shown.height
+      ctx.drawImage(
+        bitmap,
+        (from - part.x) * sx,
+        r.y * sy,
+        (to - from) * sx,
+        r.height * sy,
+        from - r.x,
+        0,
+        to - from,
+        r.height,
+      )
+    })
   }
 </script>
 
@@ -475,7 +558,7 @@
   onpointercancel={pointer}
 >
   <div class="strip" bind:this={strip}>
-    <canvas bind:this={canvas} width="0" height="0" aria-label="Page {page + 1}"></canvas>
+    <canvas bind:this={canvas} width="0" height="0" aria-label="Page {unitLabel(pages)}"></canvas>
     <canvas bind:this={beside} width="0" height="0" aria-hidden="true"></canvas>
   </div>
   {#if failure}
