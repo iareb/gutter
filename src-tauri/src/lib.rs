@@ -42,10 +42,14 @@ pub fn run() {
 // The input recorder exists only in debug builds
 #[cfg(debug_assertions)]
 fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool {
-    tauri::generate_handler![volume::open_volume, recording::save_recording]
+    tauri::generate_handler![
+        volume::open_volume,
+        volume::page_sizes,
+        recording::save_recording
+    ]
 }
 
 #[cfg(not(debug_assertions))]
 fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool {
-    tauri::generate_handler![volume::open_volume]
+    tauri::generate_handler![volume::open_volume, volume::page_sizes]
 }

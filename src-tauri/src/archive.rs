@@ -11,6 +11,14 @@ pub trait PageSource: Send {
 
     /// The bytes of one page (counted from 0), as stored.
     fn read(&mut self, n: usize) -> Result<Vec<u8>, String>;
+
+    /// The first bytes of a page: at least `max` of them when it has that many,
+    /// which is enough to read its size from the image header. A format that
+    /// cannot read part of an entry reads all of it.
+    fn head(&mut self, n: usize, max: usize) -> Result<Vec<u8>, String> {
+        let _ = max;
+        self.read(n)
+    }
 }
 
 /// Extensions of the image formats gutter reads as pages.

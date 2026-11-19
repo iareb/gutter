@@ -72,6 +72,22 @@ impl PageSource for Cbz {
         entry.read_to_end(&mut bytes).map_err(|e| unreadable(&e))?;
         Ok(bytes)
     }
+
+    fn head(&mut self, n: usize, max: usize) -> Result<Vec<u8>, String> {
+        let unreadable =
+            |e: &dyn std::fmt::Display| format!("Page {} could not be read ({e}).", n + 1);
+        let index = *self
+            .indices
+            .get(n)
+            .ok_or_else(|| format!("Page {} does not exist.", n + 1))?;
+        let entry = self.archive.by_index(index).map_err(|e| unreadable(&e))?;
+        let mut bytes = Vec::new();
+        entry
+            .take(max as u64)
+            .read_to_end(&mut bytes)
+            .map_err(|e| unreadable(&e))?;
+        Ok(bytes)
+    }
 }
 
 #[cfg(test)]

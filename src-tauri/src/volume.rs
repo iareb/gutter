@@ -61,6 +61,26 @@ impl Volume {
     }
 }
 
+impl Volume {
+    /// The size of a page, in pixels, from its image header, reading no more of
+    /// the page than that needs where the format allows. None when it cannot be told.
+    pub fn page_size(&self, n: usize) -> Option<(u32, u32)> {
+        // Most headers are in the first few kilobytes; a JPEG with a large
+        // thumbnail or metadata in front can push its size further
+        for max in [64 * 1024, 1024 * 1024, usize::MAX] {
+            let bytes = self.source.lock().unwrap().head(n, max).ok()?;
+            if let Ok(size) = imagesize::blob_size(&bytes) {
+                return Some((size.width as u32, size.height as u32));
+            }
+            if bytes.len() < max {
+                // The whole page was read and it has no size we can read
+                return None;
+            }
+        }
+        None
+    }
+}
+
 /// The volume being read. Opening another one replaces it.
 #[derive(Default)]
 pub struct Volumes {
@@ -113,6 +133,24 @@ pub fn open_volume(
     Ok(VolumeInfo { id, pages })
 }
 
+/// Sizes of pages `from..to` (counted from 0), from their image headers, to
+/// lay out double pages. A size that cannot be told is null. Asked in small
+/// runs, so that the pages being read are never kept waiting for long: the
+/// volume is locked page by page.
+#[tauri::command]
+pub async fn page_sizes(
+    volumes: State<'_, Volumes>,
+    id: u32,
+    from: usize,
+    to: usize,
+) -> Result<Vec<Option<(u32, u32)>>, String> {
+    let volume = volumes
+        .get(id)
+        .ok_or_else(|| "This volume is no longer open.".to_string())?;
+    let to = to.min(volume.page_names().len());
+    Ok((from.min(to)..to).map(|n| volume.page_size(n)).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::{Seek, Write};
@@ -158,6 +196,63 @@ mod tests {
         assert_eq!(
             volume.read_page(1).unwrap(),
             (b"b/10.png".to_vec(), "image/png")
+        );
+    }
+
+    /// The start of a PNG: enough for its size, nothing to decode.
+    fn png_header(width: u32, height: u32) -> Vec<u8> {
+        let mut b = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+        b.extend_from_slice(&width.to_be_bytes());
+        b.extend_from_slice(&height.to_be_bytes());
+        b.extend_from_slice(&[8, 6, 0, 0, 0]);
+        b
+    }
+
+    /// A JPEG header with two large metadata segments before the size.
+    fn jpeg_after_metadata(width: u16, height: u16) -> Vec<u8> {
+        let mut b = vec![0xFF, 0xD8];
+        for _ in 0..2 {
+            b.extend_from_slice(&[0xFF, 0xE1]);
+            b.extend_from_slice(&60_002u16.to_be_bytes());
+            b.extend(std::iter::repeat_n(0, 60_000));
+        }
+        b.extend_from_slice(&[0xFF, 0xC0, 0x00, 0x11, 0x08]);
+        b.extend_from_slice(&height.to_be_bytes());
+        b.extend_from_slice(&width.to_be_bytes());
+        b.extend_from_slice(&[3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, 0xFF, 0xD9]);
+        b
+    }
+
+    #[test]
+    fn tells_page_sizes_from_their_headers() {
+        let mut writer = ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let pages: [(&str, Vec<u8>); 3] = [
+            ("1.png", png_header(300, 200)),
+            ("2.png", b"not an image".to_vec()),
+            // A JPEG whose size comes after 120 KB of metadata: found by reading more of it
+            ("3.jpg", jpeg_after_metadata(40, 60)),
+        ];
+        for (name, bytes) in &pages {
+            writer
+                .start_file(*name, SimpleFileOptions::default())
+                .unwrap();
+            writer.write_all(bytes).unwrap();
+        }
+        let volume = Volume::open(temp_file(&writer.finish().unwrap().into_inner())).unwrap();
+        assert_eq!(volume.page_size(0), Some((300, 200)));
+        assert_eq!(volume.page_size(1), None);
+        assert_eq!(volume.page_size(2), Some((40, 60)));
+        assert_eq!(volume.page_size(3), None);
+    }
+
+    #[test]
+    fn tells_page_sizes_in_a_cbr() {
+        let volume = Volume::open(fixtures::open("pages-rar5.cbr")).unwrap();
+        let (bytes, _) = volume.read_page(0).unwrap();
+        let expected = imagesize::blob_size(&bytes).unwrap();
+        assert_eq!(
+            volume.page_size(0),
+            Some((expected.width as u32, expected.height as u32))
         );
     }
 
