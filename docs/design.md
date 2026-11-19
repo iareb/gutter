@@ -159,7 +159,7 @@ The app has two screens: **Library** and **Reader**. While reading, the interfac
 - The rest of the screen is the page, on a black or dark grey background.
 - A bottom bar with a page slider with previews and the page number comes later; whether it is always there or on demand is decided then.
 - Tap zones on the sides: left and right 25% of the screen, swapped in manga mode.
-- Modes: single page, double page (with single cover and detection of pages that are already spreads), continuous vertical scroll.
+- Modes: single page, double page (with single cover and detection of pages that are already spreads), continuous vertical scroll. *Since M3:* in double page mode a page wider than tall is a spread and shows alone, and so does the page before it, so that the pairs after it stay right; the cover alone is on by default. The pairing needs the shape of every page before the current one: Rust reads it from the image headers, and the viewer waits for it rather than guess.
 - Fit: to screen in the page modes; to width in vertical scroll, where it is the point (decided in the M3 plan: a page taller than the screen in a page mode would act as a zoomed one, which the wheel and the keys cannot turn).
 
 **Library**
