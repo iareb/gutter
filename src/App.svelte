@@ -12,6 +12,7 @@
   import type { Size } from './core/fit'
   import { fileName, openVolume, pageLoaders, pageSizes, type Volume } from './core/volume'
   import PageView from './PageView.svelte'
+  import ScrollView from './ScrollView.svelte'
   import Stats from './Stats.svelte'
 
   let volume = $state<Volume>()
@@ -37,6 +38,7 @@
   /** Current page, counted from 0. */
   let page = $state(0)
   let viewer = $state<PageView>()
+  let scroller = $state<ScrollView>()
 
   // Units: the pages shown together (two side by side in double page mode).
   // In double page mode the sizes of the pages are read from their headers,
@@ -72,7 +74,8 @@
   })
 
   $effect(() => {
-    if (!volume || !store || settings.mode !== 'double') return
+    // Double page needs the shapes to pair pages, vertical scroll the heights to stack them
+    if (!volume || !store || settings.mode === 'single') return
     const v = volume
     const s = store
     let cancelled = false
@@ -105,7 +108,13 @@
 
   // Pairs need more decoded pages kept around the current one
   $effect(() => {
-    store?.setKeep(settings.mode === 'double' ? { ahead: 6, behind: 4 } : KEEP_DECODED)
+    store?.setKeep(
+      settings.mode === 'double'
+        ? { ahead: 6, behind: 4 }
+        : settings.mode === 'vertical'
+          ? { ahead: 5, behind: 3 }
+          : KEEP_DECODED,
+    )
   })
   /** The page is still being fetched, and has been for a moment: say so. */
   let loading = $state(false)
@@ -139,6 +148,8 @@
     target = undefined
     // Any page of a unit: the unit is shown, and the page becomes its first
     if (volume) page = Math.min(Math.max(value, 1), volume.pages.length) - 1
+    // In vertical scroll: that page at the top of the screen
+    scroller?.jumpTo(page)
   }
 
   // All input goes through the gesture engine as normalized events
@@ -272,6 +283,10 @@
     if (!volume || event.ctrlKey || event.altKey || event.metaKey) return
     // The arrows of a slider that has the focus move the slider, not the page
     if ((event.target as HTMLElement | null)?.tagName === 'INPUT') return
+    if (settings.mode === 'vertical') {
+      if (scroller?.key(event.key, event.shiftKey)) event.preventDefault()
+      return
+    }
     if (input(fromKey(event, 0))) event.preventDefault()
   }
 
@@ -359,6 +374,15 @@
               />
               Two side by side
             </label>
+            <label>
+              <input
+                type="radio"
+                name="mode"
+                checked={settings.mode === 'vertical'}
+                onchange={() => setMode('vertical')}
+              />
+              Vertical scroll
+            </label>
             <label class:off={settings.mode !== 'double'}>
               <input
                 type="checkbox"
@@ -406,6 +430,19 @@
 
   {#if error}
     <p class="error" role="alert">{error}</p>
+  {:else if volume && store && settings.mode === 'vertical'}
+    {#key store}
+      <ScrollView
+        bind:this={scroller}
+        {store}
+        count={volume.pages.length}
+        start={page}
+        {sizesSeen}
+        onpage={(n) => (page = n)}
+        onloading={(value) => (loading = value)}
+      />
+    {/key}
+    {#if stats}<Stats {store} />{/if}
   {:else if volume && store && layout && shownUnit}
     <PageView
       bind:this={viewer}
