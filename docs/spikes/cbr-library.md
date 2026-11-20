@@ -1,6 +1,6 @@
 # Spike `cbr-library` — Which library reads CBR files
 
-**Question:** which RAR library should gutter use for CBR: the pure Rust `rars` crate, or bindings to UnRAR (`unrar-ng`)? It has to read a page without unpacking the whole archive, build on Windows, Linux and Android, and have a license compatible with an MIT project.
+**Question:** which RAR library should Gutter use for CBR: the pure Rust `rars` crate, or bindings to UnRAR (`unrar-ng`)? It has to read a page without unpacking the whole archive, build on Windows, Linux and Android, and have a license compatible with an MIT project.
 
 **Answer: `rars`.** Both libraries return exactly the same bytes for every page of every archive tried, so correctness is not what separates them. `rars` wins on the things that cannot be fixed later: it is pure Rust (builds for Android from a Windows machine with no setup, where the UnRAR bindings fail to build), it is Apache-2.0 (UnRAR's license is not open source) and it has limits for hostile files. It loses on speed in solid RAR5 archives (about 4 times slower) and it refuses to open a truncated archive at all, where UnRAR still reads the pages before the cut. Both costs are manageable, see the decision.
 

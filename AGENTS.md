@@ -1,10 +1,10 @@
 # AGENTS.md
 
-Instructions for coding agents working on gutter. Read this first, then [docs/design.md](docs/design.md) for the full rationale.
+Instructions for coding agents working on Gutter. Read this first, then [docs/design.md](docs/design.md) for the full rationale.
 
 ## Project
 
-gutter is an open-source comic book reader for Windows, Linux, macOS, Android and iOS, built from a single codebase. Its reason to exist is doing the basics right: pages at full quality, predictable gestures, an interface that stays out of the way.
+Gutter is an open-source comic book reader for Windows, Linux, macOS, Android and iOS, built from a single codebase. Its reason to exist is doing the basics right: pages at full quality, predictable gestures, an interface that stays out of the way.
 
 Not in scope for 0.1: online store or downloads, cloud sync, editing files, DRM.
 

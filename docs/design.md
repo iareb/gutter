@@ -1,4 +1,4 @@
-# gutter — Design document
+# Gutter — Design document
 
 Started Oct 28, 2026 · Samuele
 
@@ -58,7 +58,7 @@ Why this split: a 100 MB CBZ must never be copied whole into JavaScript. Rust op
 | Image decoding | The webview's `createImageBitmap` | Native system decoding, off the main thread. Decode only: resizing happens on a canvas in steps, since neither WebKitGTK nor Chromium resizes without moire at every ratio (see the rendering pipeline) |
 | PDF (post-MVP) | pdf.js | De facto standard for PDF in the browser |
 | Native side | Rust (Tauri commands) | Filesystem, archives, parallel thumbnail generation |
-| Persistence | SQLite via Tauri plugin | Library and reading positions |
+| Persistence | SQLite in Rust (`rusqlite`) | Library and reading positions; the SQL plugin was the first idea, the M4 plan moves the queries to Rust where they can be tested |
 | Tests | Vitest + Playwright | Unit tests of the logic, end-to-end tests of the viewer |
 
 Rejected alternatives: Electron + Capacitor (two projects, heavy apps), Python (weak mobile support), C core with native UI (too much work before the first result), archives in JavaScript with fflate or WASM (fflate works on the whole file in memory; RAR in WASM is fragile and slow).
@@ -186,7 +186,7 @@ Only the pages around the current one are kept decoded in memory; everything els
 - **Read the archive without extracting it all:** Rust reads only the requested page's entry from the ZIP index.
 - **Work off the main thread:** extraction in Rust on separate threads, decoding and downscaling in two Workers, so the interface never freezes while flipping or scrolling. (A first measurement in M3 found no gain from a Worker; that was with the accelerated canvas. With the downscale in main memory a page at the full width of a computer screen took 0.5 s on the main thread and stalled scrolling: see the [`page-memory` spike](spikes/page-memory.md).)
 - **How a page is made matters more than its size:** drawing the full page on an accelerated canvas leaves it in the graphics memory. Every page is made on a canvas in main memory instead: on a phone a page that is not ready takes about 0.7 s instead of 0.1 s, and the graphics memory stays flat (334 MB at the peak of a fast session against 774 MB).
-- **Thumbnails:** generated once, saved to disk as WebP, lazy-loaded while scrolling the library.
+- **Thumbnails:** generated once, saved to disk (JPEG, decided in the M4 plan: the `image` crate writes only lossless WebP), lazy-loaded while scrolling the library.
 
 Measurable targets:
 
@@ -266,17 +266,17 @@ We start with the viewer, because that's where all the problems of existing read
 
 **Rough estimates.** Estimates assume development by coding agents, with one person leading, testing and validating about 10 hours a week. The bottleneck is not writing code but testing it on devices and tuning gestures.
 
-| Milestone | First estimate | Actual or revised (end of M1) |
-| --- | --- | --- |
-| M0 + M0.5 | 1–2 weeks | **3 days** (Oct 31 – Nov 2, 2026) |
-| M1 | 1–2 weeks | **6 days** (Nov 2 – Nov 7) |
-| M2 | 3–5 weeks (biggest risk: tuning on real devices) | 2–3 weeks |
-| M2.5 | — (part of M5) | about 1 week, spike included |
-| M2.6 | — (asked for during M2) | two or three days |
-| M3 | 2–3 weeks | 2–3 weeks |
-| M4 | 1–2 weeks | 1 week |
-| M5 | 1–2 weeks | 1 week (CBR moved to M2.5) |
-| **Total up to 0.1** (Windows, Linux, Android) | **about 3–4 months** | **about 7–10 weeks from now**: release 0.1 around January 2027 |
+| Milestone | First estimate | Actual or revised (end of M1) | Actual or revised (end of M3) |
+| --- | --- | --- | --- |
+| M0 + M0.5 | 1–2 weeks | **3 days** (Oct 31 – Nov 2, 2026) | |
+| M1 | 1–2 weeks | **6 days** (Nov 2 – Nov 7) | |
+| M2 | 3–5 weeks (biggest risk: tuning on real devices) | 2–3 weeks | **6 days** (Nov 7 – 13), the laptop trackpad left |
+| M2.5 | — (part of M5) | about 1 week, spike included | **3 days** (Nov 13 – 15) |
+| M2.6 | — (asked for during M2) | two or three days | **2 days** (Nov 16 – 17) |
+| M3 | 2–3 weeks | 2–3 weeks | **4 days** (Nov 17 – 20) |
+| M4 | 1–2 weeks | 1 week | 4–6 days |
+| M5 | 1–2 weeks | 1 week (CBR moved to M2.5) | 4–6 days, signed builds included |
+| **Total up to 0.1** (Windows, Linux, Android) | **about 3–4 months** | **about 7–10 weeks from now**: release 0.1 around January 2027 | **about 2 weeks from now**: release 0.1 in early December 2026 |
 
 **Revision at the end of M1.** M0 to M1 took about 9 days instead of 2–4 weeks, with more than the assumed 10 hours a week of validation. Writing code was not the bottleneck; finding problems on real devices was. Every step of M1 hit something only a device showed: moire at the phone's real downscale ratio, fractional pixel densities resampling the page, Vite reloading the page on Android, quick taps lost to double-tap detection. So the revision keeps the device-heavy milestones wide:
 
@@ -285,11 +285,13 @@ We start with the viewer, because that's where all the problems of existing read
 - **M4** shrinks: a cover grid and SQLite are well-trodden ground.
 - **M5** stays: the CBR library choice (`unrar` or libarchive) and building it for Android are still open. *Update during M2:* CBR moves to its own milestone, M2.5, before M3, with a spike first; M5 keeps image folders and the release. The order changes, not the total.
 
-macOS and iOS add 1–3 weeks after 0.1. Next revision at the end of M3.
+**Revision at the end of M3.** M2 to M3 took 15 days instead of the 4–6 weeks revised after M1. The pace held because every step was tried on the three platforms the same day, by scripts driving the real app (real events on Windows, WebKitGTK in WSL, a real finger on the phone through adb), so the maintainer's time went to deciding, not to repeating checks. What took longest was not the features but what measuring them turned up: in M3 the memory of the decoded pages (an accelerated canvas keeps every page it ever drew), a scroll that stalled for half a second, two bugs of mine that only showed as numbers, and a graphics cache filled by the slides. M4 and M5 are lighter on that side: a cover grid, SQLite and a release are known ground; the risks left are thumbnails of solid CBR archives (each one a pass over the archive) and signing the Android and Windows builds.
+
+macOS and iOS add 1–3 weeks after 0.1. Next revision at the end of M4.
 
 Open questions:
 
-- [x] Project name: **gutter**
+- [x] Project name: **Gutter**
 - [x] License: **MIT**
 - [x] Rendering on `<canvas>` or `<img>`: **`<canvas>` with a 2D context** ([`canvas-vs-img` benchmark](spikes/canvas-vs-img.md)): an `<img>` either lets the browser downscale, leaving moire, or needs the page re-encoded as PNG, up to 25 times slower
 - [x] CBR library: **`rars`** (pure Rust, Apache-2.0), chosen by the [`cbr-library` spike](spikes/cbr-library.md). The UnRAR license is not an open-source license (F-Droid treats apps bundling it as non-free) and its bindings do not build for Android from Windows; libarchive was not tried, as it needs a C build for every Android target. UnRAR could come back as an optional feature if truncated archives turn out to matter

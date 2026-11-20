@@ -1,4 +1,4 @@
-# gutter
+# Gutter
 
 A fast, open-source comic book reader for desktop and mobile that never degrades your pages.
 
@@ -6,7 +6,7 @@ A fast, open-source comic book reader for desktop and mobile that never degrades
 
 ## Why
 
-Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages on a trackpad flick, and look dated. gutter aims to fix exactly that:
+Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages on a trackpad flick, and look dated. Gutter aims to fix exactly that:
 
 - **The page comes first.** While reading, the screen holds the comic and a slim options bar, nothing else.
 - **No quality loss.** Pages are always rendered at the screen's physical resolution, and re-rendered sharp after zooming.
@@ -26,7 +26,7 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 - Swipe to turn the page: it follows your finger with the next page beside it; a key, a tap or a wheel notch slide the pages too. One page per mouse notch and one per trackpad flick, even with its inertia
 - Left-to-right or right-to-left (manga) reading, from the View menu in the options bar; the choice is remembered
 - Two pages side by side, with the cover alone if you like and wide pages (spreads) always alone
-- Vertical scroll (webtoon): the pages one under the other, fitted to the width, with the wheel, the keys or a finger
+- Vertical scroll (webtoon): the pages one under the other, fitted to the width; the wheel, the keys or a finger scroll it, with inertia, and it zooms with a pinch, Ctrl+wheel or a double tap
 - Pages in natural order (`page 2` before `page 10`), junk files skipped
 - JPEG, PNG, WebP and AVIF pages; AVIF is decoded in Rust where the system webview can't (Linux)
 - Clear messages for damaged, incomplete and password-protected files, and for damaged pages, while the rest of the comic stays readable

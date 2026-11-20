@@ -1,6 +1,6 @@
 # Development setup
 
-How to get gutter running from a fresh machine. Desktop needs the common tools plus the section for your OS; Android needs a desktop setup first.
+How to get Gutter running from a fresh machine. Desktop needs the common tools plus the section for your OS; Android needs a desktop setup first.
 
 Versions below are the ones the project is developed with. Newer ones usually work.
 
@@ -20,7 +20,7 @@ pnpm install
 pnpm tauri dev
 ```
 
-The first run compiles all Rust dependencies and takes a few minutes; later runs only rebuild what changed. A dark window titled gutter means everything works.
+The first run compiles all Rust dependencies and takes a few minutes; later runs only rebuild what changed. A dark window titled Gutter means everything works.
 
 ## Windows
 
@@ -71,7 +71,7 @@ corepack enable pnpm
 
 ### Linux inside WSL (Windows)
 
-WSL 2 on Windows 11 runs gutter with WSLg, which shows Linux windows on the Windows desktop. Useful to test WebKitGTK without a Linux machine. Follow the Linux steps inside the distribution, plus:
+WSL 2 on Windows 11 runs Gutter with WSLg, which shows Linux windows on the Windows desktop. Useful to test WebKitGTK without a Linux machine. Follow the Linux steps inside the distribution, plus:
 
 - **Clone inside the Linux home** (`~/gutter`), not under `/mnt/c`: Windows files seen from Linux are slow, and `node_modules` differs between the two systems.
 - **Use Linux's own Node and pnpm.** The Windows ones are on the WSL `PATH` too (e.g. `/mnt/c/.../npm/pnpm`); `command -v pnpm` must print a Linux path.
@@ -140,7 +140,7 @@ pnpm tauri android dev
 This builds the app, installs it on the phone and loads the UI from the dev server on the PC. Code changes do not reach the phone live: restart the command to see them. The live connection is turned off on mobile, because when the system file picker sent the app to the background the connection dropped and Vite reloaded the page, losing the open comic. Things that look like bugs but are not:
 
 - **The app closes after a second when opened without the PC.** A dev build has no UI of its own; it needs `pnpm tauri android dev` running.
-- **No icon on the home screen.** Apps installed through adb are not added automatically; find gutter in the app drawer.
+- **No icon on the home screen.** Apps installed through adb are not added automatically; find Gutter in the app drawer.
 - **The first install over Wi-Fi is slow.** The dev APK is about 150 MB.
 
 To copy a test file to the phone:
@@ -155,7 +155,7 @@ Logs from the app (`console.log` in the UI shows up as `Tauri/Console`):
 adb logcat -s Tauri/Console
 ```
 
-The webview of a dev build can also be inspected from the PC: open `chrome://inspect` in Chrome or Edge with the phone connected, and gutter is listed under the phone.
+The webview of a dev build can also be inspected from the PC: open `chrome://inspect` in Chrome or Edge with the phone connected, and Gutter is listed under the phone.
 
 ## Recording input
 

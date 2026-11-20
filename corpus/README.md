@@ -1,6 +1,6 @@
 # Test corpus
 
-Comics to develop and test gutter with. Copyrighted comics never go in the repo, so this folder holds only this file: everything else is generated or local, and ignored by git.
+Comics to develop and test Gutter with. Copyrighted comics never go in the repo, so this folder holds only this file: everything else is generated or local, and ignored by git.
 
 | Folder | Content |
 | --- | --- |
@@ -38,7 +38,7 @@ Tiny CBR files for the Rust tests are committed instead, in [tests/fixtures](../
 | `large-rar5.cbr` | The 40 heavy pages of `large.cbz`, about 120 MB | Opening and page-change times of a big CBR, memory |
 | `large-solid.cbr` | The same, RAR 5 and solid | The window of decoded pages: turning forward, back, and jumping to the last page (about a second, with "Loading page…" shown) |
 | `truncated.cbr` | A 5-page RAR 5 cut at 60% | "This archive is incomplete…", no crash |
-| `password.cbr` | 3 pages encrypted with the password `secret` | "This archive is password-protected, and gutter cannot open those yet." |
+| `password.cbr` | 3 pages encrypted with the password `secret` | "This archive is password-protected, and Gutter cannot open those yet." |
 | `password-names.cbr` | The same, with the names encrypted too | The same message: a different failure inside |
 | `damaged-page.cbr` | 3 pages stored without compression, with a byte of the second flipped | Page 2 says it is damaged; pages 1 and 3 read |
 | `not-a-rar.cbr` | A RAR signature followed by nothing that makes sense | "This file is not a CBR archive, or it is damaged…" |
