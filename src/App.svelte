@@ -438,6 +438,7 @@
         count={volume.pages.length}
         start={page}
         {sizesSeen}
+        reading={settings.direction}
         onpage={(n) => (page = n)}
         onloading={(value) => (loading = value)}
       />
@@ -455,7 +456,7 @@
     />
     {#if stats}<Stats {store} />{/if}
   {:else}
-    <p class="empty">gutter</p>
+    <p class="empty">Gutter</p>
   {/if}
 </main>
 

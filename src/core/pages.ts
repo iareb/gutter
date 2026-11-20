@@ -165,6 +165,16 @@ export class PageStore {
     return item?.kind === 'bitmap' ? item.bitmap : undefined
   }
 
+  /** The largest decode of a page there is, at whatever size: to show while the right one is made. */
+  anyBitmap(n: number): ImageBitmap | undefined {
+    let best: ImageBitmap | undefined
+    for (const key of this.cache.keysOf(n)) {
+      const item = this.cache.get(key)
+      if (item?.kind === 'bitmap' && (!best || item.bitmap.width > best.width)) best = item.bitmap
+    }
+    return best
+  }
+
   /** The encoded page: from the cache, or fetched (once, however many ask). */
   data(n: number): Promise<PageData> {
     const item = this.cache.get(dataKey(n))
