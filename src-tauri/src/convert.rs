@@ -4,7 +4,7 @@
 /// Converts a page, given its bytes and MIME type, to PNG.
 pub fn to_png(bytes: &[u8], mime: &str) -> Result<Vec<u8>, String> {
     if mime != "image/avif" {
-        return Err("it is damaged or in a format gutter cannot read".into());
+        return Err("it is damaged or in a format Gutter cannot read".into());
     }
     avif_to_png(bytes)
 }

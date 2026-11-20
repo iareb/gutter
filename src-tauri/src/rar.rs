@@ -46,7 +46,7 @@ const MAX_DICTIONARY: u64 = if cfg!(any(target_os = "android", target_os = "ios"
 const MAX_PAGE_BYTES: u64 = 256 * 1024 * 1024;
 
 const PASSWORD_MESSAGE: &str =
-    "This archive is password-protected, and gutter cannot open those yet.";
+    "This archive is password-protected, and Gutter cannot open those yet.";
 
 /// What reading is bounded by.
 #[derive(Clone, Copy)]
@@ -218,13 +218,13 @@ fn size_text(bytes: u64) -> String {
 
 fn dictionary_message(required: u64, limit: u64) -> String {
     format!(
-        "This archive needs {} of memory to unpack, more than the {} gutter allows on this device.",
+        "This archive needs {} of memory to unpack, more than the {} Gutter allows on this device.",
         size_text(required),
         size_text(limit)
     )
 }
 
-/// Whether the error is about a password, which gutter does not take yet.
+/// Whether the error is about a password, which Gutter does not take yet.
 fn is_password(error: &Error) -> bool {
     matches!(
         root(error),
@@ -274,7 +274,7 @@ fn page_message(n: usize, error: &Error) -> String {
             "Page {page} could not be read: the archive ends too soon, or the file cannot be read ({error})."
         ),
         Error::MemberOutputLimitExceeded { limit, .. } => format!(
-            "Page {page} is bigger than the {} gutter reads.",
+            "Page {page} is bigger than the {} Gutter reads.",
             size_text(*limit)
         ),
         Error::Rar50DictionaryLimitExceeded { limit, required } => format!(
@@ -687,7 +687,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             error,
-            "This archive needs 1 MB of memory to unpack, more than the 512 KB gutter allows on this device."
+            "This archive needs 1 MB of memory to unpack, more than the 512 KB Gutter allows on this device."
         );
         // At the limit it opens
         let settings = Settings {
@@ -725,7 +725,7 @@ mod tests {
         let mut rar = Rar::open_with(fixtures::open("pages-rar5.cbr"), settings).unwrap();
         assert_eq!(
             rar.read(0).err().unwrap(),
-            "Page 1 is bigger than the 10 bytes gutter reads."
+            "Page 1 is bigger than the 10 bytes Gutter reads."
         );
         // The limit is not a state: the page is refused again, not half-read
         assert!(rar.read(1).is_err());
@@ -828,7 +828,7 @@ mod tests {
                     required: 1 << 30
                 })
             ),
-            "Page 1 could not be read. This archive needs 1024 MB of memory to unpack, more than the 64 MB gutter allows on this device."
+            "Page 1 could not be read. This archive needs 1024 MB of memory to unpack, more than the 64 MB Gutter allows on this device."
         );
         // What nobody planned for still says what it was
         assert_eq!(

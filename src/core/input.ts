@@ -114,7 +114,7 @@ const round = (n: number) => Math.round(n * 100) / 100
 export function parseRecording(json: unknown): Recording {
   const r = json as Recording
   if (r?.version !== 1 || !Array.isArray(r.events) || !r.area) {
-    throw new Error('Not a gutter input recording (version 1)')
+    throw new Error('Not a Gutter input recording (version 1)')
   }
   return r
 }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "gutter",
+  "productName": "Gutter",
   "version": "0.1.0",
   "identifier": "io.github.iareb.gutter",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "gutter",
+        "title": "Gutter",
         "width": 1024,
         "height": 768,
         "minWidth": 360,

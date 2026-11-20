@@ -21,7 +21,7 @@ pub trait PageSource: Send {
     }
 }
 
-/// Extensions of the image formats gutter reads as pages.
+/// Extensions of the image formats Gutter reads as pages.
 const PAGE_EXTENSIONS: [&str; 5] = ["jpg", "jpeg", "png", "webp", "avif"];
 
 /// Whether an archive entry is a page: an image file, not a folder and not
