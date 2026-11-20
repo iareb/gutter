@@ -26,7 +26,8 @@ describe('settings', () => {
   it('keeps the default for anything broken or unknown', () => {
     expect(parseSettings('not json')).toEqual(DEFAULT_SETTINGS)
     expect(parseSettings('42')).toEqual(DEFAULT_SETTINGS)
-    expect(parseSettings('{"direction":"up","mode":"vertical"}')).toEqual(DEFAULT_SETTINGS)
+    expect(parseSettings('{"direction":"up","mode":"sideways"}')).toEqual(DEFAULT_SETTINGS)
+    expect(parseSettings('{"mode":"vertical"}').mode).toBe('vertical')
     expect(parseSettings('{"direction":"rtl","extra":1}')).toEqual({
       direction: 'rtl',
       mode: 'single',

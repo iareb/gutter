@@ -1,7 +1,7 @@
 import type { Direction } from './navigation'
 
-/** How pages are laid out: one at a time, or two side by side. Vertical scroll comes later in M3. */
-export type Mode = 'single' | 'double'
+/** How pages are laid out: one at a time, two side by side, or one under the other (vertical scroll). */
+export type Mode = 'single' | 'double' | 'vertical'
 
 /**
  * The reader's choices that hold for every volume. Kept in the webview's
@@ -31,7 +31,10 @@ export function parseSettings(text: string | null): Settings {
   return {
     direction:
       r.direction === 'rtl' || r.direction === 'ltr' ? r.direction : DEFAULT_SETTINGS.direction,
-    mode: r.mode === 'single' || r.mode === 'double' ? r.mode : DEFAULT_SETTINGS.mode,
+    mode:
+      r.mode === 'single' || r.mode === 'double' || r.mode === 'vertical'
+        ? r.mode
+        : DEFAULT_SETTINGS.mode,
     cover: typeof r.cover === 'boolean' ? r.cover : DEFAULT_SETTINGS.cover,
   }
 }
