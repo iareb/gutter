@@ -31,6 +31,8 @@ tauri-plugin-documents = { path = "plugins/documents" }
 rars = { version = "0.12", default-features = false }
 # Reads width and height from image headers, without decoding
 imagesize = "0.15"
+# The library. Bundled: the same SQLite on every platform, built from C by the NDK on Android
+rusqlite = { version = "0.43", features = ["bundled"] }
 
 # WebKitGTK cannot decode AVIF on Linux, and keeps touchpad pinch from the page;
 # the other webviews do neither. AVIF decoding is pure Rust, but building it on
