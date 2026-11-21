@@ -38,7 +38,7 @@ Every file arrives with its name (`spike-a.cbz`) and size. Files come from the D
 | Picked with `ACTION_GET_CONTENT` or the dialog plugin | opens | `Permission Denial … requires that you obtain access using ACTION_OPEN_DOCUMENT` | the same |
 | A file under the picked folder (5 files, 3 levels) | opens | opens | opens |
 
-So today's app, which opens files through the dialog plugin, could not reopen a single volume of a library after a restart.
+So today's app, which opens files through the dialog plugin, could not reopen a single volume of a library after a restart. The kept permissions also survive installing a new build over the old one (`adb install -r`), seen while trying step 4.2.
 
 **Files that went away.** With the app running, outside the app (`adb shell`): `spike-del.cbz` deleted, `spike-rename.cbz` renamed to `spike-renamed.cbz`, a new `sub/spike-new.cbz` copied in.
 

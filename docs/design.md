@@ -58,14 +58,15 @@ Why this split: a 100 MB CBZ must never be copied whole into JavaScript. Rust op
 | Image decoding | The webview's `createImageBitmap` | Native system decoding, off the main thread. Decode only: resizing happens on a canvas in steps, since neither WebKitGTK nor Chromium resizes without moire at every ratio (see the rendering pipeline) |
 | PDF (post-MVP) | pdf.js | De facto standard for PDF in the browser |
 | Native side | Rust (Tauri commands) | Filesystem, archives, parallel thumbnail generation |
-| Persistence | SQLite in Rust (`rusqlite`) | Library and reading positions; the SQL plugin was the first idea, the M4 plan moves the queries to Rust where they can be tested |
+| Persistence | SQLite in Rust (`rusqlite`, bundled) | Library and reading positions, in one file in the app's data folder (see [the library](#the-library)); the SQL plugin was the first idea, the M4 plan moved the queries to Rust where they can be tested |
+| Files on Android | A plugin of our own, `src-tauri/plugins/documents` (Kotlin) | The dialog plugin's addresses stop working once the app closes; this one asks with `ACTION_OPEN_DOCUMENT` and `ACTION_OPEN_DOCUMENT_TREE` and keeps the permission, as the [`android-library` spike](spikes/android-library.md) found it must |
 | Tests | Vitest + Playwright | Unit tests of the logic, end-to-end tests of the viewer |
 
 Rejected alternatives: Electron + Capacitor (two projects, heavy apps), Python (weak mobile support), C core with native UI (too much work before the first result), archives in JavaScript with fflate or WASM (fflate works on the whole file in memory; RAR in WASM is fragile and slow).
 
 Known stack risks, to verify in milestone M0.5 before building the rest:
 
-- Tauri 2 on mobile is less mature than on desktop; file access on Android goes through the Storage Access Framework (`content://` URIs, not normal paths). **Verified in the [`android-files` spike](spikes/android-files.md):** Rust opens the picked URI as a seekable file through `tauri-plugin-fs` and reads single ZIP entries without loading the archive.
+- Tauri 2 on mobile is less mature than on desktop; file access on Android goes through the Storage Access Framework (`content://` URIs, not normal paths). **Verified in the [`android-files` spike](spikes/android-files.md):** Rust opens the picked URI as a seekable file through `tauri-plugin-fs` and reads single ZIP entries without loading the archive. *Update in M4:* the address the dialog plugin returns can no longer be read once the app is closed, so a library could not reopen a volume; the [`android-library` spike](spikes/android-library.md) found that addresses picked with `ACTION_OPEN_DOCUMENT`, and files inside a folder picked with `ACTION_OPEN_DOCUMENT_TREE`, keep opening after the app is closed and the phone restarted, once the permission is kept.
 - System webviews differ: WebView2 (Windows), WebKitGTK (Linux), WKWebView (macOS/iOS), Android System WebView. Image formats, gesture events and memory limits vary between them.
 - On Linux, WebKitGTK is the webview with the most known performance issues.
 
@@ -91,6 +92,7 @@ flowchart TB
     Archive["Archive reader"]
     Thumbs["Thumbnails"]
     DB["SQLite"]
+    Docs["Documents plugin (Android)"]
   end
 
   FS --> Archive
@@ -99,9 +101,21 @@ flowchart TB
   Reader -- "input" --> Gestures --> State --> Renderer
   Library -- "Tauri commands" --> Thumbs
   Library -- "Tauri commands" --> DB
+  Library -- "picking files and folders" --> Docs --> FS
 ```
 
 A page travels this chain (a solid RAR archive is the exception: a page can only be decoded after the ones before it, so those are read in one forward pass with a cache, see the [`cbr-library` spike](spikes/cbr-library.md)): Rust opens the archive and extracts only the requested entry, serves it to the webview through the custom protocol, decoding produces the bitmap, the cache keeps it and the renderer draws it in the reader. In parallel, the gesture engine translates the reader's input into changes to the viewer state, which decides what the renderer must show. The library uses thumbnails and SQLite through Tauri commands.
+
+### The library
+
+Since M4 the volumes the reader added live in `library.sqlite3`, in the app's data folder (`%APPDATA%io.github.iareb.gutter` on Windows, `~/.local/share/io.github.iareb.gutter` on Linux, the app's private folder on Android), in `src-tauri/src/library.rs`:
+
+- **Two tables.** A volume: its address (a path on a computer, a `content://` address on Android), name, size, fingerprint, page count, when it was added and last opened. Its reading state: the page, whether it is finished, and the direction, page mode and cover chosen while reading it (null: the View menu's choice).
+- **A schema version.** The database records its version; the steps from one version to the next are a list in the code, run in one transaction at start, and never changed once released. A database from a newer Gutter is refused rather than touched.
+- **The fingerprint** is the file's size and a hash of its first and last 64 KB (64-bit FNV-1a, which never changes between versions, unlike Rust's own hasher): cheap for a file of any size, and the same after a move or a rename.
+- **Adding a file** finds it at its address (a file changed in place keeps its place), or by fingerprint at another address. Then the old address decides: if it no longer opens, the file moved or was renamed and the volume takes the new address with its place; if it still opens, the new file is a copy and nothing is added. Without that check a folder holding two copies of one comic would move the volume back and forth each time it is listed (found on the phone in step 4.2).
+- **Removing** a volume deletes its rows, never the file.
+- **On Android** files and folders are picked through the documents plugin, which keeps the permission to read them; a folder is one permission whatever it holds (Android allows 512 per app), and the system refuses the root of the storage and `Download` itself, so the reader picks a folder inside them.
 
 ## Rendering pipeline and image quality
 
@@ -166,7 +180,7 @@ The app has two screens: **Library** and **Reader**. While reading, the interfac
 
 - Grid of covers with a progress indicator.
 - "Continue reading" section at the top.
-- Add files or folders by drag and drop (desktop) or system picker (mobile).
+- Add files or folders by drag and drop (desktop) or system picker (mobile). On Android a folder must be one inside `Download` or the storage, not those themselves: the system refuses them.
 
 **Style guidelines**
 
