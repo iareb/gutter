@@ -24,6 +24,8 @@ serde_json = "1"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+# Files and folders chosen on Android, kept readable across restarts (M4)
+tauri-plugin-documents = { path = "plugins/documents" }
 # CBR files. Pure Rust, so it builds for Android from any machine; only reading is
 # needed: no writing, recovery, passwords or threads (docs/spikes/cbr-library.md)
 rars = { version = "0.12", default-features = false }

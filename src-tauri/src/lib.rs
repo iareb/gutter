@@ -18,6 +18,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_documents::init())
         .manage(volume::Volumes::default())
         .setup(|_app| {
             // WebKitGTK keeps touchpad pinch from the page: read it from the widget

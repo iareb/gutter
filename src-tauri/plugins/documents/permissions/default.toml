@@ -1,0 +1,5 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Every command of the plugin."
+permissions = ["allow-pick-files", "allow-pick-folder", "allow-list-folder", "allow-describe", "allow-held", "allow-release"]
