@@ -35,7 +35,7 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 ## Planned features
 
 - Image folders (JPEG, PNG, WebP, AVIF)
-- Library with covers (in progress: the reading position is saved, the screen with the covers comes next)
+- Library with covers (in progress: the reading position is saved and the covers are made; the screen that shows them comes next)
 
 Built with [Tauri 2](https://tauri.app), [Svelte 5](https://svelte.dev), TypeScript and Rust. See the [design document](docs/design.md) for the full plan.
 
