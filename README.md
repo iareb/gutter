@@ -24,7 +24,8 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 - A slider in the options bar to go to any page; a zoomed page stays put: neither the wheel nor the arrows turn it, they only move it
 - The pages around the current one are prepared in advance, within a memory budget: the next page is on screen at once, and memory stays flat over a long reading session
 - Swipe to turn the page: it follows your finger with the next page beside it; a key, a tap or a wheel notch slide the pages too. One page per mouse notch and one per trackpad flick, even with its inertia
-- Left-to-right or right-to-left (manga) reading, from the View menu in the options bar; the choice is remembered
+- Left-to-right or right-to-left (manga) reading, from the View menu in the options bar
+- Every comic opens again where you left it, with the direction and page mode you read it with; a comic never opened takes your last choices. On Android a comic picked once stays readable after the app is closed, and the bar shows its name
 - Two pages side by side, with the cover alone if you like and wide pages (spreads) always alone
 - Vertical scroll (webtoon): the pages one under the other, fitted to the width; the wheel, the keys or a finger scroll it, with inertia, and it zooms with a pinch, Ctrl+wheel or a double tap
 - Pages in natural order (`page 2` before `page 10`), junk files skipped
@@ -34,7 +35,7 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 ## Planned features
 
 - Image folders (JPEG, PNG, WebP, AVIF)
-- Library with covers and saved reading position (in progress: the database and the access to files and folders on Android are done)
+- Library with covers (in progress: the reading position is saved, the screen with the covers comes next)
 
 Built with [Tauri 2](https://tauri.app), [Svelte 5](https://svelte.dev), TypeScript and Rust. See the [design document](docs/design.md) for the full plan.
 

@@ -108,13 +108,14 @@ A page travels this chain (a solid RAR archive is the exception: a page can only
 
 ### The library
 
-Since M4 the volumes the reader added live in `library.sqlite3`, in the app's data folder (`%APPDATA%io.github.iareb.gutter` on Windows, `~/.local/share/io.github.iareb.gutter` on Linux, the app's private folder on Android), in `src-tauri/src/library.rs`:
+Since M4 the volumes the reader added live in `library.sqlite3`, in the app's data folder (`%APPDATA%\io.github.iareb.gutter` on Windows, `~/.local/share/io.github.iareb.gutter` on Linux, the app's private folder on Android), in `src-tauri/src/library.rs`:
 
 - **Two tables.** A volume: its address (a path on a computer, a `content://` address on Android), name, size, fingerprint, page count, when it was added and last opened. Its reading state: the page, whether it is finished, and the direction, page mode and cover chosen while reading it (null: the View menu's choice).
 - **A schema version.** The database records its version; the steps from one version to the next are a list in the code, run in one transaction at start, and never changed once released. A database from a newer Gutter is refused rather than touched.
 - **The fingerprint** is the file's size and a hash of its first and last 64 KB (64-bit FNV-1a, which never changes between versions, unlike Rust's own hasher): cheap for a file of any size, and the same after a move or a rename.
 - **Adding a file** finds it at its address (a file changed in place keeps its place), or by fingerprint at another address. Then the old address decides: if it no longer opens, the file moved or was renamed and the volume takes the new address with its place; if it still opens, the new file is a copy and nothing is added. Without that check a folder holding two copies of one comic would move the volume back and forth each time it is listed (found on the phone in step 4.2).
 - **Removing** a volume deletes its rows, never the file.
+- **Where you left off.** Every file opened joins the library, and opens again at its page with its direction, page mode and cover (`src/core/library.ts`). The place is saved at once on the first change, then at most once a second, keeping the last of a burst of turns, and at once when the app goes to the background, the window is closed or another volume is opened: a closed window waits for that save before it goes. Reaching the last page marks a volume finished, and going back does not undo it.
 - **On Android** files and folders are picked through the documents plugin, which keeps the permission to read them; a folder is one permission whatever it holds (Android allows 512 per app), and the system refuses the root of the storage and `Download` itself, so the reader picks a folder inside them.
 
 ## Rendering pipeline and image quality
@@ -187,7 +188,7 @@ The app has two screens: **Library** and **Reader**. While reading, the interfac
 - Dark theme by default, optional light theme.
 - System typography, rounded corners, no superfluous decorative icons.
 - Short animations (150–250 ms) for page transitions, always at 60 fps.
-- Settings reachable in at most 2 taps, with an immediate preview of the effect. *Since M3:* a View button in the options bar opens a menu with the reading direction and the page mode; a choice applies at once and closes the menu. The choices hold for every volume and are kept in the webview's storage; choices for one volume come with the library.
+- Settings reachable in at most 2 taps, with an immediate preview of the effect. *Since M3:* a View button in the options bar opens a menu with the reading direction and the page mode; a choice applies at once and closes the menu. The choices hold for every volume and are kept in the webview's storage. *Since M4:* each volume keeps the choices it was read with in the library; the menu shows those of the open volume, a choice made there holds for it and becomes the default for the volumes never read.
 - Right to left mirrors what has a side: the tap zones, the left and right arrows, the swipe, the slide of the pages and the slider. What has no side keeps the order of the pages: up and down, PageUp, PageDown, Space and the wheel go forward and back in both directions.
 
 ## Memory management and performance
