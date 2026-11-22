@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core'
   import { SvelteSet } from 'svelte/reactivity'
-  import { open } from '@tauri-apps/plugin-dialog'
+  import { getCurrentWindow } from '@tauri-apps/api/window'
   import { fromKey, type InputEvent, type Recording } from './core/input'
   import { GestureEngine, type Action } from './core/gestures'
   import { leaveSide, type Direction, type Move } from './core/navigation'
@@ -10,15 +10,37 @@
   import { KEEP_DECODED, PageStore } from './core/pages'
   import { isWide, Layout, unitLabel, type Unit } from './core/spreads'
   import type { Size } from './core/fit'
-  import { fileName, openVolume, pageLoaders, pageSizes, type Volume } from './core/volume'
+  import { openVolume, pageLoaders, pageSizes, pickComic, type Volume } from './core/volume'
+  import {
+    addToLibrary,
+    choicesFor,
+    markOpened,
+    PlaceSaver,
+    saveReading,
+    startPage,
+    type Entry,
+  } from './core/library'
   import PageView from './PageView.svelte'
   import ScrollView from './ScrollView.svelte'
   import Stats from './Stats.svelte'
 
   let volume = $state<Volume>()
   /** The reader's choices for every volume, saved as soon as they change. */
-  let settings = $state.raw<Settings>(loadSettings())
+  const saved = loadSettings()
+  let settings = $state.raw<Settings>(saved)
   $effect(() => saveSettings(settings))
+  /**
+   * The choices the open volume is read with: its own, kept in the library, or the
+   * menu's for a volume never read. A choice made in the menu holds for this volume
+   * and becomes the default for the volumes never read.
+   */
+  let view = $state.raw<Settings>(saved)
+  /** The open volume in the library, where its place is kept. Missing if the library cannot be reached. */
+  let entry = $state.raw<Entry>()
+  /** Saves the place of the open volume, at most once a second. */
+  let saver: PlaceSaver | undefined
+  /** The open volume has been read to its last page, now or before. */
+  let finished = false
   /** The View menu is open. */
   let menu = $state(false)
   let viewBox = $state<HTMLDivElement>()
@@ -53,8 +75,8 @@
     const s = store
     return new Layout({
       count: volume.pages.length,
-      double: settings.mode === 'double',
-      cover: settings.cover,
+      double: view.mode === 'double',
+      cover: view.cover,
       wide: (n) => {
         const size = s.peekSize(n)
         return size ? isWide(size) : unreadable.has(n) ? false : undefined
@@ -75,7 +97,7 @@
 
   $effect(() => {
     // Double page needs the shapes to pair pages, vertical scroll the heights to stack them
-    if (!volume || !store || settings.mode === 'single') return
+    if (!volume || !store || view.mode === 'single') return
     const v = volume
     const s = store
     let cancelled = false
@@ -109,9 +131,9 @@
   // Pairs need more decoded pages kept around the current one
   $effect(() => {
     store?.setKeep(
-      settings.mode === 'double'
+      view.mode === 'double'
         ? { ahead: 6, behind: 4 }
-        : settings.mode === 'vertical'
+        : view.mode === 'vertical'
           ? { ahead: 5, behind: 3 }
           : KEEP_DECODED,
     )
@@ -157,22 +179,25 @@
     width: () => viewer?.area().width ?? 0,
     zoomed: () => viewer?.zoomed() ?? false,
     edges: () => viewer?.edges() ?? { left: true, right: true },
-    direction: () => settings.direction,
+    direction: () => view.direction,
   })
 
   function choose(direction: Direction) {
+    view = { ...view, direction }
     settings = { ...settings, direction }
     menu = false
     blur()
   }
 
   function setMode(mode: Mode) {
+    view = { ...view, mode }
     settings = { ...settings, mode }
     menu = false
     blur()
   }
 
   function setCover(cover: boolean) {
+    view = { ...view, cover }
     settings = { ...settings, cover }
     menu = false
     blur()
@@ -198,24 +223,82 @@
     }
   })
 
+  // Every change of page or of choice saves the place, at most once a second
+  $effect(() => {
+    if (!volume || !entry) return
+    const last = volume.pages.length - 1
+    if (unit ? unit[unit.length - 1] === last : page === last) finished = true
+    saver?.set({ page, finished, direction: view.direction, mode: view.mode, cover: view.cover })
+  })
+
+  // ... and what is waiting is saved at once when the app goes to the background or closes
+  $effect(() => {
+    const flush = () => void saver?.flush()
+    const hidden = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    document.addEventListener('visibilitychange', hidden)
+    window.addEventListener('pagehide', flush)
+    let unlisten: (() => void) | undefined
+    let gone = false
+    void getCurrentWindow()
+      .onCloseRequested(async () => {
+        await saver?.flush()
+      })
+      .then((u) => (gone ? u() : (unlisten = u)))
+      .catch(() => {})
+    return () => {
+      gone = true
+      unlisten?.()
+      document.removeEventListener('visibilitychange', hidden)
+      window.removeEventListener('pagehide', flush)
+    }
+  })
+
   async function pick() {
-    const path = await open({ multiple: false, directory: false })
-    if (!path) return
+    let picked
+    try {
+      picked = await pickComic()
+    } catch (e) {
+      error = String(e)
+      return
+    }
+    if (!picked) return
     busy = true
     error = undefined
     try {
-      const opened = await openVolume(path)
+      await saver?.flush()
+      const opened = await openVolume(picked.address)
+      // The library finds the volume, also moved or renamed; reading works without it
+      const found: Entry | undefined = await addToLibrary(
+        picked.address,
+        picked.name,
+        opened.pages.length,
+      ).then(
+        ([e]) => e,
+        (e) => {
+          console.warn('[gutter] not in the library:', e)
+          return undefined
+        },
+      )
       store?.dispose()
       store = new PageStore(pageLoaders(opened), defaultBudget())
       unreadable.clear()
       shownUnit = undefined
+      entry = found
+      view = choicesFor(found, settings)
+      finished = found?.finished ?? false
+      saver = found ? new PlaceSaver((r) => saveReading(found.id, r)) : undefined
+      if (found) void markOpened(found.id, opened.pages.length).catch(() => {})
       volume = opened
-      title = fileName(path)
-      page = 0
+      title = found?.name ?? picked.name
+      page = startPage(found, opened.pages.length)
     } catch (e) {
       store?.dispose()
       store = undefined
       volume = undefined
+      entry = undefined
+      saver = undefined
       error = String(e)
     } finally {
       busy = false
@@ -234,7 +317,7 @@
     if (!layout) return
     const next = layout.target(page, move)
     if (next === page) return
-    if (move === 'next' || move === 'previous') viewer?.leave(leaveSide(move, settings.direction))
+    if (move === 'next' || move === 'previous') viewer?.leave(leaveSide(move, view.direction))
     page = next
   }
 
@@ -267,7 +350,7 @@
     const next = layout.target(page, move)
     if (next === page) return viewer?.settle()
     // The next page comes from the right in left-to-right reading, from the left in right to left
-    viewer?.leave(leaveSide(move, settings.direction))
+    viewer?.leave(leaveSide(move, view.direction))
     page = next
   }
 
@@ -283,7 +366,7 @@
     if (!volume || event.ctrlKey || event.altKey || event.metaKey) return
     // The arrows of a slider that has the focus move the slider, not the page
     if ((event.target as HTMLElement | null)?.tagName === 'INPUT') return
-    if (settings.mode === 'vertical') {
+    if (view.mode === 'vertical') {
       if (scroller?.key(event.key, event.shiftKey)) event.preventDefault()
       return
     }
@@ -339,7 +422,7 @@
               <input
                 type="radio"
                 name="direction"
-                checked={settings.direction === 'ltr'}
+                checked={view.direction === 'ltr'}
                 onchange={() => choose('ltr')}
               />
               Left to right
@@ -348,7 +431,7 @@
               <input
                 type="radio"
                 name="direction"
-                checked={settings.direction === 'rtl'}
+                checked={view.direction === 'rtl'}
                 onchange={() => choose('rtl')}
               />
               Right to left (manga)
@@ -360,7 +443,7 @@
               <input
                 type="radio"
                 name="mode"
-                checked={settings.mode === 'single'}
+                checked={view.mode === 'single'}
                 onchange={() => setMode('single')}
               />
               One at a time
@@ -369,7 +452,7 @@
               <input
                 type="radio"
                 name="mode"
-                checked={settings.mode === 'double'}
+                checked={view.mode === 'double'}
                 onchange={() => setMode('double')}
               />
               Two side by side
@@ -378,16 +461,16 @@
               <input
                 type="radio"
                 name="mode"
-                checked={settings.mode === 'vertical'}
+                checked={view.mode === 'vertical'}
                 onchange={() => setMode('vertical')}
               />
               Vertical scroll
             </label>
-            <label class:off={settings.mode !== 'double'}>
+            <label class:off={view.mode !== 'double'}>
               <input
                 type="checkbox"
-                checked={settings.cover}
-                disabled={settings.mode !== 'double'}
+                checked={view.cover}
+                disabled={view.mode !== 'double'}
                 onchange={(event) => setCover(event.currentTarget.checked)}
               />
               First page alone (cover)
@@ -409,7 +492,7 @@
           max={volume.pages.length}
           value={target ?? page + 1}
           aria-label="Go to page"
-          style:direction={settings.direction}
+          style:direction={view.direction}
           oninput={(event) => slide(event.currentTarget.valueAsNumber)}
           onchange={(event) => {
             commit(event.currentTarget.valueAsNumber)
@@ -430,7 +513,7 @@
 
   {#if error}
     <p class="error" role="alert">{error}</p>
-  {:else if volume && store && settings.mode === 'vertical'}
+  {:else if volume && store && view.mode === 'vertical'}
     {#key store}
       <ScrollView
         bind:this={scroller}
@@ -438,7 +521,7 @@
         count={volume.pages.length}
         start={page}
         {sizesSeen}
-        reading={settings.direction}
+        reading={view.direction}
         onpage={(n) => (page = n)}
         onloading={(value) => (loading = value)}
       />
@@ -450,7 +533,7 @@
       {store}
       unit={shownUnit}
       {layout}
-      reading={settings.direction}
+      reading={view.direction}
       oninput={input}
       onloading={(value) => (loading = value)}
     />

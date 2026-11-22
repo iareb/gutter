@@ -1,4 +1,5 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import { open } from '@tauri-apps/plugin-dialog'
 import { decode } from './decode'
 import type { Size } from './fit'
 import type { Loaders } from './pages'
@@ -81,9 +82,38 @@ export function pageLoaders(volume: Volume): Loaders {
   }
 }
 
+/** A file picked to read: its address and, when known, its name. */
+export type Picked = { address: string; name?: string }
+
+const android = () => /Android/i.test(navigator.userAgent)
+
 /**
- * File name to show for a picked file. Android `content://` URIs carry no
- * readable name, so they get none.
+ * Asks the reader for a comic. On Android through the documents plugin, which
+ * keeps the permission to read the file after the app closes and gives its real
+ * name (the dialog plugin's address stops working: docs/spikes/android-library.md);
+ * elsewhere through the dialog plugin, whose paths do not expire. Undefined when
+ * the reader cancels.
+ */
+export async function pickComic(): Promise<Picked | undefined> {
+  if (android()) {
+    type Result = { files: { uri: string; name?: string }[] }
+    try {
+      const { files } = await invoke<Result>('plugin:documents|pick_files', {
+        args: { action: 'open', multiple: false },
+      })
+      return files[0] && { address: files[0].uri, name: files[0].name }
+    } catch (e) {
+      if (String(e).includes('cancelled')) return undefined
+      throw e
+    }
+  }
+  const path = await open({ multiple: false, directory: false })
+  return path ? { address: path, name: fileName(path) } : undefined
+}
+
+/**
+ * File name to show for a path. Android `content://` addresses carry no
+ * readable name, so they get none here: the documents plugin gives it.
  */
 export function fileName(path: string): string | undefined {
   if (path.startsWith('content://')) return undefined
