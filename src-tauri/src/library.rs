@@ -380,6 +380,19 @@ impl Library {
             Err(e) => Err(format!("The library could not be opened ({e}).")),
         }
     }
+
+    /// A volume of the library, by its id.
+    pub fn entry(&self, id: i64) -> Result<Option<Entry>, String> {
+        self.with(|conn| by_id(conn, id))
+    }
+}
+
+/// Opens the volume at a library address: a path, or a `content://` address on Android.
+pub fn open_volume_at(app: &AppHandle, address: &str) -> Result<Volume, String> {
+    let path = address
+        .parse::<FilePath>()
+        .map_err(|_| format!("Not an address: {address}"))?;
+    Volume::open(open_file(app, path)?)
 }
 
 fn open_file(app: &AppHandle, address: FilePath) -> Result<File, String> {

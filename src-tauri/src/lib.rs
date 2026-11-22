@@ -12,6 +12,7 @@ pub mod protocol;
 pub mod rar;
 #[cfg(debug_assertions)]
 pub mod recording;
+pub mod thumbs;
 pub mod volume;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -32,6 +33,13 @@ pub fn run() {
                 eprintln!("The library could not be opened: {e}");
             }
             app.manage(library::Library::new(opened));
+            // Covers live in the cache folder: the system may clear it, and they are made again
+            let covers = app
+                .path()
+                .app_cache_dir()
+                .unwrap_or_else(|_| std::env::temp_dir().join("gutter"))
+                .join("thumbs");
+            app.manage(thumbs::Thumbs::new(covers));
             // WebKitGTK keeps touchpad pinch from the page: read it from the widget
             #[cfg(target_os = "linux")]
             pinch::forward(app);
@@ -44,6 +52,17 @@ pub fn run() {
             tauri::async_runtime::spawn_blocking(move || {
                 let volumes = app.state::<volume::Volumes>();
                 responder.respond(protocol::respond(&volumes, &path));
+            });
+        })
+        .register_asynchronous_uri_scheme_protocol("thumb", |ctx, request, responder| {
+            let app = ctx.app_handle().clone();
+            let path = request.uri().path().to_owned();
+            // Making a cover decodes a page: keep it off the webview's thread
+            tauri::async_runtime::spawn_blocking(move || {
+                let library = app.state::<library::Library>();
+                let thumbs = app.state::<thumbs::Thumbs>();
+                let open = |address: &str| library::open_volume_at(&app, address);
+                responder.respond(protocol::cover(&library, &thumbs, &path, open));
             });
         })
         .invoke_handler(handler())

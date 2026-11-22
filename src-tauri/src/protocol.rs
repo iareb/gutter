@@ -8,7 +8,9 @@
 use tauri::http::{Response, StatusCode, header};
 
 use crate::convert;
-use crate::volume::Volumes;
+use crate::library::Library;
+use crate::thumbs::Thumbs;
+use crate::volume::{Volume, Volumes};
 
 /// A request parsed from its path, `/<id>/<n>` or `/<id>/<n>/png`.
 #[derive(Debug, PartialEq, Eq)]
@@ -68,6 +70,43 @@ pub fn respond(volumes: &Volumes, path: &str) -> Response<Vec<u8>> {
             builder.body(bytes).unwrap()
         }
         Err(message) => error(StatusCode::NOT_FOUND, message),
+    }
+}
+
+/// The `thumb` protocol: the cover of the library volume `id`, at
+/// `thumb://localhost/<id>` (`http://thumb.localhost/<id>` on Windows and Android).
+/// Made the first time it is asked for (see [`crate::thumbs`]); a volume with
+/// no cover, or one that cannot be read, answers 404 and the library shows a
+/// placeholder. Blocking: call it off the webview's thread.
+pub fn cover(
+    library: &Library,
+    thumbs: &Thumbs,
+    path: &str,
+    open: impl FnOnce(&str) -> Result<Volume, String>,
+) -> Response<Vec<u8>> {
+    let Some(id) = path.strip_prefix('/').and_then(|p| p.parse::<i64>().ok()) else {
+        return error(
+            StatusCode::BAD_REQUEST,
+            format!("Not a cover address: {path}"),
+        );
+    };
+    let entry = match library.entry(id) {
+        Ok(Some(entry)) => entry,
+        Ok(None) => {
+            return error(
+                StatusCode::NOT_FOUND,
+                "No such volume in the library.".into(),
+            );
+        }
+        Err(e) => return error(StatusCode::NOT_FOUND, e),
+    };
+    match thumbs.get(&entry.fingerprint, || open(&entry.address)) {
+        Ok(Some(jpeg)) => response(StatusCode::OK, "image/jpeg").body(jpeg).unwrap(),
+        Ok(None) => error(
+            StatusCode::NOT_FOUND,
+            "This volume has no cover: its first page cannot be decoded.".into(),
+        ),
+        Err(e) => error(StatusCode::NOT_FOUND, e),
     }
 }
 
@@ -215,5 +254,39 @@ mod tests {
             assert_eq!(response.status(), status, "{path}");
             assert_eq!(response.body(), message.as_bytes(), "{path}");
         }
+    }
+
+    #[test]
+    fn serves_the_cover_of_a_library_volume() {
+        use crate::library::{self, Candidate, Library};
+        use crate::thumbs::Thumbs;
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut conn = library::open(&dir.path().join("library.sqlite3")).unwrap();
+        let file = Candidate {
+            address: "a.cbz",
+            name: "a.cbz",
+            size: 9,
+            fingerprint: "9-ab",
+            pages: Some(1),
+        };
+        let (entry, _) = library::add(&mut conn, &file, 1, |_| false).unwrap();
+        let library = Library::new(Ok(conn));
+        let thumbs = Thumbs::new(dir.path().join("thumbs"));
+        let page = crate::fixtures::page("page 1.png");
+        let open = |address: &str| {
+            assert_eq!(address, "a.cbz");
+            Ok(volume_with(&[("1.png", &page)]))
+        };
+
+        let response = super::cover(&library, &thumbs, &format!("/{}", entry.id), open);
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[header::CONTENT_TYPE], "image/jpeg");
+        assert_eq!(&response.body()[..2], [0xff, 0xd8]);
+
+        let missing = super::cover(&library, &thumbs, "/999", |_| unreachable!());
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+        let bad = super::cover(&library, &thumbs, "/abc", |_| unreachable!());
+        assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
     }
 }

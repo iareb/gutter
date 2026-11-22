@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import type { Direction } from './navigation'
 import type { Mode, Settings } from './settings'
 
@@ -47,6 +47,16 @@ export function markOpened(id: number, pages: number): Promise<boolean> {
 
 export function saveReading(id: number, reading: Reading): Promise<boolean> {
   return invoke<boolean>('library_save', { id, reading })
+}
+
+/**
+ * Address of the cover of a library volume, served by the Rust `thumb` protocol:
+ * `http://thumb.localhost/<id>` on Windows and Android, `thumb://localhost/<id>`
+ * elsewhere. Made the first time it is asked for; a volume with no cover answers
+ * 404, and the library shows a placeholder.
+ */
+export function coverUrl(id: number): string {
+  return convertFileSrc(String(id), 'thumb')
 }
 
 /** The choices to read a volume with: its own where it has them, the menu's otherwise. */
