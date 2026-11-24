@@ -85,7 +85,8 @@ export function pageLoaders(volume: Volume): Loaders {
 /** A file picked to read: its address and, when known, its name. */
 export type Picked = { address: string; name?: string }
 
-const android = () => /Android/i.test(navigator.userAgent)
+/** Android, where files come through the documents plugin. */
+export const isAndroid = () => /Android/i.test(navigator.userAgent)
 
 /**
  * Asks the reader for a comic. On Android through the documents plugin, which
@@ -95,7 +96,7 @@ const android = () => /Android/i.test(navigator.userAgent)
  * the reader cancels.
  */
 export async function pickComic(): Promise<Picked | undefined> {
-  if (android()) {
+  if (isAndroid()) {
     type Result = { files: { uri: string; name?: string }[] }
     try {
       const { files } = await invoke<Result>('plugin:documents|pick_files', {

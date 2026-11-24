@@ -81,6 +81,10 @@ fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool {
         library::library_opened,
         library::library_save,
         library::library_remove,
+        library::library_add_many,
+        library::library_scan,
+        library::library_remember_folder,
+        library::library_folders,
         recording::save_recording
     ]
 }
@@ -94,6 +98,10 @@ fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool {
         library::library_list,
         library::library_opened,
         library::library_save,
-        library::library_remove
+        library::library_remove,
+        library::library_add_many,
+        library::library_scan,
+        library::library_remember_folder,
+        library::library_folders
     ]
 }

@@ -5,15 +5,17 @@
 
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
+use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
 use tauri_plugin_fs::{FilePath, FsExt, OpenOptions};
 
+use crate::archive;
 use crate::volume::Volume;
 
 /// The steps from one schema version to the next: the database is at version `n`
@@ -44,6 +46,13 @@ const MIGRATIONS: &[&str] = &[
         direction TEXT,
         mode TEXT,
         cover INTEGER
+    );",
+    // 2: folders added on Android, listed again when the library opens
+    "CREATE TABLE folders (
+        id INTEGER PRIMARY KEY,
+        -- A content://.../tree/... address
+        address TEXT NOT NULL UNIQUE,
+        added INTEGER NOT NULL
     );",
 ];
 
@@ -389,10 +398,7 @@ impl Library {
 
 /// Opens the volume at a library address: a path, or a `content://` address on Android.
 pub fn open_volume_at(app: &AppHandle, address: &str) -> Result<Volume, String> {
-    let path = address
-        .parse::<FilePath>()
-        .map_err(|_| format!("Not an address: {address}"))?;
-    Volume::open(open_file(app, path)?)
+    Volume::open(open_address(app, address)?)
 }
 
 fn open_file(app: &AppHandle, address: FilePath) -> Result<File, String> {
@@ -401,6 +407,170 @@ fn open_file(app: &AppHandle, address: FilePath) -> Result<File, String> {
     app.fs()
         .open(address, options)
         .map_err(|e| format!("The file could not be opened ({e})."))
+}
+
+/// The files a library takes: CBZ and CBR, and CB7, which is not read yet and is
+/// reported as such rather than skipped without a word.
+pub fn is_comic(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    [".cbz", ".cbr", ".cb7"].iter().any(|e| name.ends_with(e))
+}
+
+/// Every comic in these paths: a file is taken as it is, a folder is searched with
+/// its subfolders. In natural order, so a series is added in its order.
+pub fn scan(paths: &[PathBuf]) -> Vec<PathBuf> {
+    fn walk(dir: &Path, found: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            match entry.file_type() {
+                Ok(t) if t.is_dir() => walk(&path, found),
+                Ok(_) if is_comic(&entry.file_name().to_string_lossy()) => found.push(path),
+                _ => {}
+            }
+        }
+    }
+    let mut found = Vec::new();
+    for path in paths {
+        if path.is_dir() {
+            walk(path, &mut found);
+        } else if path.is_file() {
+            found.push(path.clone());
+        }
+    }
+    found.sort_by(|a, b| archive::natural_cmp(&a.to_string_lossy(), &b.to_string_lossy()));
+    found.dedup();
+    found
+}
+
+/// Whether a volume is at this address already.
+pub fn has_address(conn: &Connection, address: &str) -> rusqlite::Result<bool> {
+    conn.query_row(
+        "SELECT 1 FROM volumes WHERE address = ?1",
+        [address],
+        |_| Ok(()),
+    )
+    .optional()
+    .map(|found| found.is_some())
+}
+
+/// Keeps a folder, to list it again later. Returns whether it was new.
+pub fn remember_folder(conn: &Connection, address: &str, now: i64) -> rusqlite::Result<bool> {
+    conn.execute(
+        "INSERT OR IGNORE INTO folders (address, added) VALUES (?1, ?2)",
+        params![address, now],
+    )
+    .map(|n| n == 1)
+}
+
+/// The folders kept, the oldest first.
+pub fn folders(conn: &Connection) -> rusqlite::Result<Vec<String>> {
+    let mut query = conn.prepare("SELECT address FROM folders ORDER BY added, id")?;
+    query.query_map([], |r| r.get(0))?.collect()
+}
+
+/// A file to add: its address and, when the system gave it, its name.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ToAdd {
+    pub address: String,
+    pub name: Option<String>,
+}
+
+/// What adding many files did.
+#[derive(Debug, Default, PartialEq, Serialize)]
+pub struct Report {
+    /// New volumes.
+    pub added: u32,
+    /// Already in the library, at the same address.
+    pub known: u32,
+    /// Found again at a new address, with their place.
+    pub moved: u32,
+    /// Copies of a volume whose file is still there.
+    pub duplicate: u32,
+    /// Files that are not readable comics, with why.
+    pub failed: Vec<Failed>,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub struct Failed {
+    pub name: String,
+    pub error: String,
+}
+
+/// How far adding many files has got.
+#[derive(Debug, Clone, Serialize)]
+pub struct Progress {
+    pub done: u32,
+    pub total: u32,
+}
+
+/// Adds one file: reads its fingerprint and, without `pages`, counts them, which
+/// refuses a file that is not a readable comic.
+fn add_file(
+    library: &Library,
+    open: &impl Fn(&str) -> Result<File, String>,
+    address: &str,
+    name: Option<String>,
+    pages: Option<u32>,
+) -> Result<(Entry, Added), String> {
+    let mut file = open(address)?;
+    let (size, fingerprint) =
+        fingerprint(&mut file).map_err(|e| format!("The file could not be read ({e})."))?;
+    let pages = match pages {
+        Some(n) => n,
+        None => Volume::open(file)?.page_names().len() as u32,
+    };
+    let name = name.unwrap_or_else(|| name_from(address));
+    let candidate = Candidate {
+        address,
+        name: &name,
+        size,
+        fingerprint: &fingerprint,
+        pages: Some(pages),
+    };
+    // The old address of a file with the same fingerprint: is the file still there?
+    let opens = |old: &str| open(old).is_ok();
+    library.with(|conn| add(conn, &candidate, now(), opens))
+}
+
+/// Adds many files, one after the other, and says what happened to each. A file
+/// already at its address is counted without being read: listing a folder again
+/// costs almost nothing for the volumes it already gave.
+pub fn add_many(
+    library: &Library,
+    open: &impl Fn(&str) -> Result<File, String>,
+    files: Vec<ToAdd>,
+    mut progress: impl FnMut(Progress),
+) -> Report {
+    let mut report = Report::default();
+    let total = files.len() as u32;
+    for (n, file) in files.into_iter().enumerate() {
+        let known = library
+            .with(|conn| has_address(conn, &file.address))
+            .unwrap_or(false);
+        if known {
+            report.known += 1;
+        } else {
+            let name = file
+                .name
+                .clone()
+                .unwrap_or_else(|| name_from(&file.address));
+            match add_file(library, open, &file.address, file.name, None) {
+                Ok((_, Added::New)) => report.added += 1,
+                Ok((_, Added::Known)) => report.known += 1,
+                Ok((_, Added::Moved)) => report.moved += 1,
+                Ok((_, Added::Duplicate)) => report.duplicate += 1,
+                Err(error) => report.failed.push(Failed { name, error }),
+            }
+        }
+        progress(Progress {
+            done: n as u32 + 1,
+            total,
+        });
+    }
+    report
 }
 
 /// Adds a file to the library, or finds it there (see [`add`]). Without `pages`,
@@ -414,28 +584,56 @@ pub async fn library_add(
     name: Option<String>,
     pages: Option<u32>,
 ) -> Result<(Entry, Added), String> {
-    let text = address.to_string();
-    let mut file = open_file(&app, address)?;
-    let (size, fingerprint) =
-        fingerprint(&mut file).map_err(|e| format!("The file could not be read ({e})."))?;
-    let pages = match pages {
-        Some(n) => n,
-        None => Volume::open(file)?.page_names().len() as u32,
-    };
-    let name = name.unwrap_or_else(|| name_from(&text));
-    let candidate = Candidate {
-        address: &text,
-        name: &name,
-        size,
-        fingerprint: &fingerprint,
-        pages: Some(pages),
-    };
-    // The old address of a file with the same fingerprint: is the file still there?
-    let opens = |old: &str| {
-        old.parse::<FilePath>()
-            .is_ok_and(|path| open_file(&app, path).is_ok())
-    };
-    library.with(|conn| add(conn, &candidate, now(), opens))
+    let open = |a: &str| open_address(&app, a);
+    add_file(&library, &open, &address.to_string(), name, pages)
+}
+
+/// Opens the file at a library address.
+fn open_address(app: &AppHandle, address: &str) -> Result<File, String> {
+    let path = address
+        .parse::<FilePath>()
+        .map_err(|_| format!("Not an address: {address}"))?;
+    open_file(app, path)
+}
+
+/// Adds many files (picked together, found in a folder, dropped on the window),
+/// telling the page how far it has got. See [`add_many`].
+#[tauri::command]
+pub async fn library_add_many(
+    app: AppHandle,
+    files: Vec<ToAdd>,
+    progress: Channel<Progress>,
+) -> Result<Report, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let library = app.state::<Library>();
+        let open = |a: &str| open_address(&app, a);
+        add_many(&library, &open, files, |p| {
+            let _ = progress.send(p);
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// The comics in these paths, folders searched with their subfolders (see [`scan`]).
+/// On a computer only: on Android a folder is listed by the documents plugin.
+#[tauri::command]
+pub async fn library_scan(paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, String> {
+    tauri::async_runtime::spawn_blocking(move || scan(&paths))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Keeps a folder picked on Android, to list it again when the library opens.
+#[tauri::command]
+pub fn library_remember_folder(library: State<Library>, address: String) -> Result<bool, String> {
+    library.with(|conn| remember_folder(conn, &address, now()))
+}
+
+#[tauri::command]
+pub fn library_folders(library: State<Library>) -> Result<Vec<String>, String> {
+    library.with(|conn| folders(conn))
 }
 
 #[tauri::command]
@@ -770,5 +968,139 @@ mod tests {
             "pàgina.cbz"
         );
         assert_eq!(name_from("content://media/document/msf%3A1234"), "1234");
+    }
+
+    #[test]
+    fn a_database_of_version_1_moves_to_version_2_keeping_its_volumes() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(MIGRATIONS[0]).unwrap();
+        conn.pragma_update(None, "user_version", 1i64).unwrap();
+        conn.execute(
+            "INSERT INTO volumes (address, name, size, fingerprint, added) VALUES ('a.cbz', 'a', 1, 'f', 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO reading (volume, page) VALUES (1, 6)", [])
+            .unwrap();
+        prepare(&mut conn).unwrap();
+        let version: i64 = conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, 2);
+        assert_eq!(list(&conn).unwrap()[0].reading.page, 6);
+        assert!(folders(&conn).unwrap().is_empty());
+    }
+
+    #[test]
+    fn folders_are_kept_once_in_the_order_added() {
+        let conn = db();
+        assert!(remember_folder(&conn, "content://tree/b", 2).unwrap());
+        assert!(remember_folder(&conn, "content://tree/a", 5).unwrap());
+        assert!(!remember_folder(&conn, "content://tree/b", 9).unwrap());
+        assert_eq!(
+            folders(&conn).unwrap(),
+            ["content://tree/b", "content://tree/a"]
+        );
+    }
+
+    #[test]
+    fn comics_are_told_by_their_extension() {
+        for name in ["a.cbz", "B.CBR", "c.cb7", "Saga 01.CbZ"] {
+            assert!(is_comic(name), "{name}");
+        }
+        for name in ["a.zip", "notes.txt", "cbz", "a.cbz.part"] {
+            assert!(!is_comic(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_folder_is_searched_with_its_subfolders_in_natural_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        for name in [
+            "10.cbz",
+            "2.cbz",
+            "notes.txt",
+            "sub/1.cbr",
+            "sub/deeper/3.cb7",
+            "sub/x.jpg",
+        ] {
+            let path = root.join(name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, b"x").unwrap();
+        }
+        let found: Vec<String> = scan(&[root.to_path_buf(), root.join("2.cbz")])
+            .iter()
+            .map(|p| {
+                p.strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+        assert_eq!(found, ["2.cbz", "10.cbz", "sub/1.cbr", "sub/deeper/3.cb7"]);
+        assert!(scan(&[root.join("missing")]).is_empty());
+    }
+
+    #[test]
+    fn adding_many_files_reports_what_happened_to_each() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = |name: &str| dir.path().join(name).to_string_lossy().into_owned();
+        std::fs::copy(crate::fixtures::path("pages-rar5.cbr"), path("a.cbr")).unwrap();
+        std::fs::copy(crate::fixtures::path("pages-rar4.cbr"), path("b.cbr")).unwrap();
+        std::fs::copy(
+            crate::fixtures::path("pages-rar5.cbr"),
+            path("copy of a.cbr"),
+        )
+        .unwrap();
+        std::fs::write(path("broken.cbz"), b"plain text").unwrap();
+        let library = Library::new(Ok(db()));
+        let opened = std::cell::Cell::new(0);
+        let open = |address: &str| {
+            opened.set(opened.get() + 1);
+            File::open(address).map_err(|e| e.to_string())
+        };
+        let files = |names: &[&str]| {
+            names
+                .iter()
+                .map(|n| ToAdd {
+                    address: path(n),
+                    name: None,
+                })
+                .collect::<Vec<_>>()
+        };
+        let mut seen = Vec::new();
+        let report = add_many(
+            &library,
+            &open,
+            files(&["a.cbr", "b.cbr", "copy of a.cbr", "broken.cbz", "gone.cbz"]),
+            |p| seen.push((p.done, p.total)),
+        );
+        assert_eq!(
+            (report.added, report.known, report.moved, report.duplicate),
+            (2, 0, 0, 1)
+        );
+        let failed: Vec<&str> = report.failed.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(failed, ["broken.cbz", "gone.cbz"]);
+        assert_eq!(seen, [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5)]);
+
+        // Again: the volumes already in are counted without opening their files
+        opened.set(0);
+        let again = add_many(&library, &open, files(&["a.cbr", "b.cbr"]), |_| {});
+        assert_eq!((again.added, again.known), (0, 2));
+        assert_eq!(opened.get(), 0);
+
+        // A file renamed outside the app is found again by its fingerprint
+        std::fs::rename(path("b.cbr"), path("b renamed.cbr")).unwrap();
+        let moved = add_many(&library, &open, files(&["b renamed.cbr"]), |_| {});
+        assert_eq!(moved.moved, 1);
+        library
+            .with(|conn| {
+                let names: Vec<String> = list(conn)?.into_iter().map(|e| e.name).collect();
+                assert_eq!(names.len(), 2);
+                assert!(names.contains(&"b renamed.cbr".to_string()));
+                Ok(())
+            })
+            .unwrap();
     }
 }

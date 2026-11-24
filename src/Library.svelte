@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { summary, type Report } from './core/adding'
   import { coverUrl, type Entry } from './core/library'
   import { continueReading, newestFirst, progress, status, title } from './core/shelf'
 
@@ -8,9 +9,14 @@
     error?: string
     onopen: (entry: Entry) => void
     onremove: (entry: Entry) => void
-    onadd: () => void
+    /** What the last adding did, until it is closed. */
+    report?: Report
+    onclosereport: () => void
+    onaddfiles: () => void
+    onaddfolder: () => void
   }
-  let { entries, error, onopen, onremove, onadd }: Props = $props()
+  let { entries, error, report, onopen, onremove, onclosereport, onaddfiles, onaddfolder }: Props =
+    $props()
 
   const reading = $derived(continueReading(entries))
   const all = $derived(newestFirst(entries))
@@ -130,11 +136,31 @@
 
 <div class="library">
   {#if error}<p class="error" role="alert">{error}</p>{/if}
+  {#if report}
+    <div class="report" role="status">
+      <p>{summary(report)}</p>
+      {#if report.failed.length}
+        <ul>
+          {#each report.failed as failed, i (i)}
+            <li><strong>{failed.name}</strong>: {failed.error}</li>
+          {/each}
+        </ul>
+      {/if}
+      <button class="close" aria-label="Close" onclick={onclosereport}>✕</button>
+    </div>
+  {/if}
   {#if entries.length === 0}
     <div class="empty">
       <p>Your library is empty.</p>
-      <p><small>Every comic you open is added to it, and opens again where you left it.</small></p>
-      <button class="add" onclick={onadd}>Open a comic…</button>
+      <p>
+        <small
+          >Add your comics, or a whole folder of them: each one opens again where you left it.</small
+        >
+      </p>
+      <div class="adds">
+        <button class="add" onclick={onaddfiles}>Add comics…</button>
+        <button class="add" onclick={onaddfolder}>Add a folder…</button>
+      </div>
     </div>
   {:else}
     {#if reading.length > 0}
@@ -303,9 +329,46 @@
     border-radius: 6px;
   }
 
-  .add {
-    justify-self: center;
+  .adds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
     margin-top: 14px;
+  }
+
+  .report {
+    position: relative;
+    margin: 8px 0;
+    padding: 10px 40px 10px 14px;
+    background: #1f1f24;
+    border: 1px solid #34343c;
+    border-radius: 8px;
+  }
+
+  .report p {
+    margin: 0;
+  }
+
+  .report ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+    font-size: 0.85rem;
+    opacity: 0.85;
+  }
+
+  .close {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    opacity: 0.7;
   }
 
   .error {

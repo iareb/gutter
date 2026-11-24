@@ -2,6 +2,17 @@
   import { invoke } from '@tauri-apps/api/core'
   import { SvelteSet } from 'svelte/reactivity'
   import { getCurrentWindow } from '@tauri-apps/api/window'
+  import { getCurrentWebview } from '@tauri-apps/api/webview'
+  import {
+    addMany,
+    pickFiles,
+    pickFolder,
+    rescanFolders,
+    scanPaths,
+    type Progress,
+    type Report,
+    type ToAdd,
+  } from './core/adding'
   import { fromKey, type InputEvent, type Recording } from './core/input'
   import { GestureEngine, type Action } from './core/gestures'
   import { leaveSide, type Direction, type Move } from './core/navigation'
@@ -40,6 +51,15 @@
   let entries = $state.raw<Entry[]>([])
   /** A volume that could not be opened from the library, or a library that could not be read. */
   let libraryError = $state<string>()
+  /** Comics being added: how far it has got. */
+  let adding = $state<Progress>()
+  /** What the last adding did, shown until closed. */
+  let report = $state.raw<Report>()
+  /** The Add menu is open. */
+  let addMenu = $state(false)
+  let addBox = $state<HTMLDivElement>()
+  /** Files are being dragged over the window. */
+  let dragging = $state(false)
   let volume = $state<Volume>()
   /** The reader's choices for every volume, saved as soon as they change. */
   const saved = loadSettings()
@@ -279,7 +299,79 @@
       libraryError = String(e)
     }
   }
-  $effect(() => void refresh())
+  $effect(() => {
+    void refresh().then(async () => {
+      // On Android the folders picked before are listed again: what is new in them is added
+      const found = await rescanFolders().catch(() => undefined)
+      if (found && (found.added || found.moved)) {
+        report = found
+        await refresh()
+      }
+    })
+  })
+
+  /** Adds the comics a source gives: picked files, a folder, files dropped on the window. */
+  async function add(source: () => Promise<ToAdd[] | undefined>) {
+    addMenu = false
+    libraryError = undefined
+    let files
+    try {
+      files = await source()
+    } catch (e) {
+      libraryError = String(e)
+      return
+    }
+    if (!files) return
+    report = undefined
+    adding = { done: 0, total: files.length }
+    try {
+      report = await addMany(files, (p) => (adding = p))
+    } catch (e) {
+      libraryError = String(e)
+    } finally {
+      adding = undefined
+    }
+    await refresh()
+  }
+
+  // Files and folders dropped on the window are added, on the library screen
+  $effect(() => {
+    let unlisten: (() => void) | undefined
+    let gone = false
+    void getCurrentWebview()
+      .onDragDropEvent((event) => {
+        const drag = event.payload
+        if (drag.type === 'enter' || drag.type === 'over') dragging = screen === 'library'
+        else if (drag.type === 'leave') dragging = false
+        else if (drag.type === 'drop') {
+          dragging = false
+          if (screen === 'library' && !adding) void add(() => scanPaths(drag.paths))
+        }
+      })
+      .then((u) => (gone ? u() : (unlisten = u)))
+      .catch(() => {})
+    return () => {
+      gone = true
+      unlisten?.()
+    }
+  })
+
+  // The Add menu closes on a click or tap outside it, and on Escape
+  $effect(() => {
+    if (!addMenu) return
+    const outside = (event: PointerEvent) => {
+      if (!addBox?.contains(event.target as Node)) addMenu = false
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') addMenu = false
+    }
+    window.addEventListener('pointerdown', outside, true)
+    window.addEventListener('keydown', escape, true)
+    return () => {
+      window.removeEventListener('pointerdown', outside, true)
+      window.removeEventListener('keydown', escape, true)
+    }
+  })
 
   async function pick() {
     let picked
@@ -488,6 +580,20 @@
   <header>
     {#if screen === 'library'}
       <button onclick={pick} disabled={busy}>Open comic…</button>
+      <div class="view" bind:this={addBox}>
+        <button
+          aria-haspopup="menu"
+          aria-expanded={addMenu}
+          disabled={!!adding}
+          onclick={() => (addMenu = !addMenu)}>Add</button
+        >
+        {#if addMenu}
+          <div class="menu" role="menu">
+            <button role="menuitem" class="item" onclick={() => add(pickFiles)}>Comics…</button>
+            <button role="menuitem" class="item" onclick={() => add(pickFolder)}>A folder…</button>
+          </div>
+        {/if}
+      </div>
       <span class="title">Library</span>
     {:else}
       <button onclick={toLibrary}>‹ Library</button>
@@ -588,6 +694,7 @@
     {/if}
     <div class="options">
       {#if busy}<small>Opening…</small>{/if}
+      {#if adding}<small>Adding {adding.done} of {adding.total}…</small>{/if}
       {#if slow || (volume && !unit)}<small>Loading page {page + 1}…</small>{/if}
       {#if DEV}
         {#if recordStatus}<small>{recordStatus}</small>{/if}
@@ -602,8 +709,12 @@
       error={libraryError}
       onopen={(e) => open({ address: e.address, name: e.name })}
       onremove={remove}
-      onadd={pick}
+      {report}
+      onclosereport={() => (report = undefined)}
+      onaddfiles={() => add(pickFiles)}
+      onaddfolder={() => add(pickFolder)}
     />
+    {#if dragging}<div class="drop">Drop comics or folders to add them to the library</div>{/if}
   {:else if error}
     <p class="error" role="alert">{error}</p>
   {:else if volume && store && view.mode === 'vertical'}
@@ -677,6 +788,31 @@
 
   .view {
     position: relative;
+  }
+
+  .menu .item {
+    padding: 8px 12px;
+    text-align: left;
+    background: none;
+    border: 0;
+  }
+
+  .menu .item:hover {
+    background: #26262c;
+  }
+
+  /* Over the library while files are dragged over the window */
+  .drop {
+    position: absolute;
+    inset: 12px;
+    z-index: 6;
+    display: grid;
+    place-items: center;
+    font-size: 1.1rem;
+    pointer-events: none;
+    background: #18181ccc;
+    border: 2px dashed #8a9bff;
+    border-radius: 12px;
   }
 
   .menu {
