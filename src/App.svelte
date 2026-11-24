@@ -10,20 +10,36 @@
   import { KEEP_DECODED, PageStore } from './core/pages'
   import { isWide, Layout, unitLabel, type Unit } from './core/spreads'
   import type { Size } from './core/fit'
-  import { openVolume, pageLoaders, pageSizes, pickComic, type Volume } from './core/volume'
+  import {
+    openVolume,
+    pageLoaders,
+    pageSizes,
+    pickComic,
+    type Picked,
+    type Volume,
+  } from './core/volume'
   import {
     addToLibrary,
     choicesFor,
+    listLibrary,
     markOpened,
     PlaceSaver,
+    removeFromLibrary,
     saveReading,
     startPage,
     type Entry,
   } from './core/library'
+  import Library from './Library.svelte'
   import PageView from './PageView.svelte'
   import ScrollView from './ScrollView.svelte'
   import Stats from './Stats.svelte'
 
+  /** The app opens on the library; a volume opens in the reader. */
+  let screen = $state<'library' | 'reader'>('library')
+  /** The volumes of the library, read again each time the library is shown. */
+  let entries = $state.raw<Entry[]>([])
+  /** A volume that could not be opened from the library, or a library that could not be read. */
+  let libraryError = $state<string>()
   let volume = $state<Volume>()
   /** The reader's choices for every volume, saved as soon as they change. */
   const saved = loadSettings()
@@ -255,17 +271,32 @@
     }
   })
 
+  /** Reads the library again: the volumes, their places, their order. */
+  async function refresh() {
+    try {
+      entries = await listLibrary()
+    } catch (e) {
+      libraryError = String(e)
+    }
+  }
+  $effect(() => void refresh())
+
   async function pick() {
     let picked
     try {
       picked = await pickComic()
     } catch (e) {
-      error = String(e)
+      libraryError = String(e)
       return
     }
-    if (!picked) return
+    if (picked) await open(picked)
+  }
+
+  /** Opens a volume in the reader, where it was left: one just picked, or one of the library. */
+  async function open(picked: Picked) {
     busy = true
     error = undefined
+    libraryError = undefined
     try {
       await saver?.flush()
       const opened = await openVolume(picked.address)
@@ -293,17 +324,61 @@
       volume = opened
       title = found?.name ?? picked.name
       page = startPage(found, opened.pages.length)
+      if (screen === 'library') {
+        screen = 'reader'
+        // An entry in the history: Android's back gesture comes back to the library
+        history.pushState({ gutter: 'reader' }, '')
+      }
     } catch (e) {
       store?.dispose()
       store = undefined
       volume = undefined
       entry = undefined
       saver = undefined
-      error = String(e)
+      // Said where the reader is: on the library a volume that cannot be opened stays listed
+      if (screen === 'library') libraryError = String(e)
+      else error = String(e)
     } finally {
       busy = false
       blur()
     }
+  }
+
+  /** Back to the library: the place is saved, the pages are let go, the library read again. */
+  async function leave() {
+    await saver?.flush()
+    store?.dispose()
+    store = undefined
+    volume = undefined
+    entry = undefined
+    saver = undefined
+    error = undefined
+    menu = false
+    screen = 'library'
+    await refresh()
+  }
+
+  /** The Library button: through the history, so that it and the back gesture are one way back. */
+  function toLibrary() {
+    if (history.state?.gutter === 'reader') history.back()
+    else void leave()
+  }
+
+  $effect(() => {
+    const popped = () => {
+      if (screen === 'reader') void leave()
+    }
+    window.addEventListener('popstate', popped)
+    return () => window.removeEventListener('popstate', popped)
+  })
+
+  async function remove(gone: Entry) {
+    try {
+      await removeFromLibrary(gone)
+    } catch (e) {
+      libraryError = String(e)
+    }
+    await refresh()
   }
 
   // Otherwise Space and Enter would press the button again instead of turning pages
@@ -411,98 +486,108 @@
 <main>
   <!-- The options bar: always there, and the place where more options will go -->
   <header>
-    <button onclick={pick} disabled={busy}>Open comic…</button>
-    <div class="view" bind:this={viewBox}>
-      <button aria-haspopup="menu" aria-expanded={menu} onclick={() => (menu = !menu)}>View</button>
-      {#if menu}
-        <div class="menu" role="menu">
-          <fieldset>
-            <legend>Reading direction</legend>
-            <label>
-              <input
-                type="radio"
-                name="direction"
-                checked={view.direction === 'ltr'}
-                onchange={() => choose('ltr')}
-              />
-              Left to right
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="direction"
-                checked={view.direction === 'rtl'}
-                onchange={() => choose('rtl')}
-              />
-              Right to left (manga)
-            </label>
-          </fieldset>
-          <fieldset>
-            <legend>Pages</legend>
-            <label>
-              <input
-                type="radio"
-                name="mode"
-                checked={view.mode === 'single'}
-                onchange={() => setMode('single')}
-              />
-              One at a time
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="mode"
-                checked={view.mode === 'double'}
-                onchange={() => setMode('double')}
-              />
-              Two side by side
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="mode"
-                checked={view.mode === 'vertical'}
-                onchange={() => setMode('vertical')}
-              />
-              Vertical scroll
-            </label>
-            <label class:off={view.mode !== 'double'}>
-              <input
-                type="checkbox"
-                checked={view.cover}
-                disabled={view.mode !== 'double'}
-                onchange={(event) => setCover(event.currentTarget.checked)}
-              />
-              First page alone (cover)
-            </label>
-          </fieldset>
-        </div>
-      {/if}
-    </div>
-    {#if volume}
-      <span class="title"
-        >{title ?? 'Comic'} · {target ?? (unit ? unitLabel(unit) : page + 1)} / {volume.pages
-          .length}</span
-      >
-      {#if volume.pages.length > 1}
-        <input
-          class="slider"
-          type="range"
-          min="1"
-          max={volume.pages.length}
-          value={target ?? page + 1}
-          aria-label="Go to page"
-          style:direction={view.direction}
-          oninput={(event) => slide(event.currentTarget.valueAsNumber)}
-          onchange={(event) => {
-            commit(event.currentTarget.valueAsNumber)
-            // Otherwise the arrows and Space would move the slider instead of turning pages
-            event.currentTarget.blur()
-          }}
-        />
+    {#if screen === 'library'}
+      <button onclick={pick} disabled={busy}>Open comic…</button>
+      <span class="title">Library</span>
+    {:else}
+      <button onclick={toLibrary}>‹ Library</button>
+    {/if}
+    {#if screen === 'reader'}
+      <div class="view" bind:this={viewBox}>
+        <button aria-haspopup="menu" aria-expanded={menu} onclick={() => (menu = !menu)}
+          >View</button
+        >
+        {#if menu}
+          <div class="menu" role="menu">
+            <fieldset>
+              <legend>Reading direction</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="direction"
+                  checked={view.direction === 'ltr'}
+                  onchange={() => choose('ltr')}
+                />
+                Left to right
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="direction"
+                  checked={view.direction === 'rtl'}
+                  onchange={() => choose('rtl')}
+                />
+                Right to left (manga)
+              </label>
+            </fieldset>
+            <fieldset>
+              <legend>Pages</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="mode"
+                  checked={view.mode === 'single'}
+                  onchange={() => setMode('single')}
+                />
+                One at a time
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="mode"
+                  checked={view.mode === 'double'}
+                  onchange={() => setMode('double')}
+                />
+                Two side by side
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="mode"
+                  checked={view.mode === 'vertical'}
+                  onchange={() => setMode('vertical')}
+                />
+                Vertical scroll
+              </label>
+              <label class:off={view.mode !== 'double'}>
+                <input
+                  type="checkbox"
+                  checked={view.cover}
+                  disabled={view.mode !== 'double'}
+                  onchange={(event) => setCover(event.currentTarget.checked)}
+                />
+                First page alone (cover)
+              </label>
+            </fieldset>
+          </div>
+        {/if}
+      </div>
+      {#if volume}
+        <span class="title"
+          >{title ?? 'Comic'} · {target ?? (unit ? unitLabel(unit) : page + 1)} / {volume.pages
+            .length}</span
+        >
+        {#if volume.pages.length > 1}
+          <input
+            class="slider"
+            type="range"
+            min="1"
+            max={volume.pages.length}
+            value={target ?? page + 1}
+            aria-label="Go to page"
+            style:direction={view.direction}
+            oninput={(event) => slide(event.currentTarget.valueAsNumber)}
+            onchange={(event) => {
+              commit(event.currentTarget.valueAsNumber)
+              // Otherwise the arrows and Space would move the slider instead of turning pages
+              event.currentTarget.blur()
+            }}
+          />
+        {/if}
       {/if}
     {/if}
     <div class="options">
+      {#if busy}<small>Opening…</small>{/if}
       {#if slow || (volume && !unit)}<small>Loading page {page + 1}…</small>{/if}
       {#if DEV}
         {#if recordStatus}<small>{recordStatus}</small>{/if}
@@ -511,7 +596,15 @@
     </div>
   </header>
 
-  {#if error}
+  {#if screen === 'library'}
+    <Library
+      {entries}
+      error={libraryError}
+      onopen={(e) => open({ address: e.address, name: e.name })}
+      onremove={remove}
+      onadd={pick}
+    />
+  {:else if error}
     <p class="error" role="alert">{error}</p>
   {:else if volume && store && view.mode === 'vertical'}
     {#key store}

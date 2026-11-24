@@ -41,6 +41,23 @@ export function addToLibrary(
   return invoke<[Entry, Added]>('library_add', { address, name: name ?? null, pages })
 }
 
+/** Every volume of the library, the last opened first. */
+export function listLibrary(): Promise<Entry[]> {
+  return invoke<Entry[]>('library_list')
+}
+
+/**
+ * Removes a volume from the library; the file is never touched. On Android the
+ * permission to read a file picked alone is given back too (one picked through a
+ * folder belongs to the folder's permission, and giving it back just fails).
+ */
+export async function removeFromLibrary(entry: Entry): Promise<void> {
+  await invoke<boolean>('library_remove', { id: entry.id })
+  if (entry.address.startsWith('content://')) {
+    await invoke('plugin:documents|release', { uri: entry.address }).catch(() => {})
+  }
+}
+
 export function markOpened(id: number, pages: number): Promise<boolean> {
   return invoke<boolean>('library_opened', { id, pages })
 }
