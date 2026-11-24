@@ -18,7 +18,8 @@ Not in scope for 0.1: online store or downloads, cloud sync, editing files, DRM.
 | Archives | `zip` crate for CBZ; `rars` (pure Rust) for CBR |
 | Page delivery | Tauri custom protocol, e.g. `page://<volume>/<n>` |
 | Image decoding | `createImageBitmap` in the webview, then downscaling on a canvas in steps; Rust `avif-decode` as fallback for AVIF on Linux |
-| Persistence | SQLite via Tauri plugin |
+| Persistence | SQLite in Rust (`rusqlite`, bundled): the library, in `src-tauri/src/library.rs`; covers made in Rust (`thumbs.rs`) and served by a `thumb` protocol |
+| Files on Android | A plugin of our own, `src-tauri/plugins/documents` (Kotlin): files and folders picked so that they stay readable after the app closes |
 | Tests | Vitest (unit), Playwright (end-to-end) |
 
 ## Architecture
@@ -27,7 +28,7 @@ Three layers, each depending only on the one below:
 
 1. **UI (Svelte):** Library and Reader screens. No business logic.
 2. **Core (TypeScript):** decoding, cache, renderer, gesture engine, viewer state. Must not import from the UI, so it can be tested on its own.
-3. **Native (Rust):** filesystem, archive reader, thumbnails, SQLite.
+3. **Native (Rust):** filesystem, archive reader, thumbnails, SQLite; on Android, files and folders through the documents plugin.
 
 A page flows: Rust reads only the requested entry from the archive → served to the webview via the custom protocol → decoded to an `ImageBitmap` → cached → drawn by the renderer. Gestures go through the gesture engine, which updates the viewer state, which tells the renderer what to draw.
 
@@ -67,7 +68,7 @@ Tooling: ESLint (flat config in `eslint.config.js`) and Prettier (`.prettierrc.j
 | Path | Content |
 | --- | --- |
 | `src/` | Frontend: Svelte UI; `src/core/` holds the TypeScript core |
-| `src-tauri/` | Native side: Rust crate, Tauri config, icons, capabilities |
+| `src-tauri/` | Native side: Rust crate, Tauri config, icons, capabilities; `plugins/documents/` is the Android plugin for files and folders |
 | `tests/recordings/` | Input recorded on devices with the expected actions, replayed by `pnpm test`: a gesture bug gets its recording here |
 | `scripts/` | Development scripts in TypeScript, run directly by Node (`make-corpus.ts`) |
 | `corpus/` | Test comics: `generated/` from `pnpm corpus`, `local/` for personal files; both ignored by git, see `corpus/README.md` |

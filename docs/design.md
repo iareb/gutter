@@ -116,6 +116,7 @@ Since M4 the volumes the reader added live in `library.sqlite3`, in the app's da
 - **Adding a file** finds it at its address (a file changed in place keeps its place), or by fingerprint at another address. Then the old address decides: if it no longer opens, the file moved or was renamed and the volume takes the new address with its place; if it still opens, the new file is a copy and nothing is added. Without that check a folder holding two copies of one comic would move the volume back and forth each time it is listed (found on the phone in step 4.2).
 - **Removing** a volume deletes its rows, never the file.
 - **Adding many** (`src/core/adding.ts`, `library_add_many` in Rust): files picked together, a folder searched with its subfolders, or files and folders dropped on the window on a computer. CBZ, CBR and CB7 are taken (CB7 to say it is not read yet), in natural order; a file already at its address is counted without being read, so listing a folder again is cheap. The library says in a line what happened and lists each file that could not be added, with why.
+- **Volumes that went away** (deleted, moved or renamed outside the app, a permission lost): each time the library is shown every file is opened, and those that do not open are greyed out. A tap says where the file was and offers to find it again (the file picked is recognized by its fingerprint and keeps the volume's place) or to remove the volume.
 - **Folders on Android** are kept (schema version 2, the `folders` table) and listed again when the library opens: what is new in them is added, a comic renamed in them is found again by its fingerprint. On a computer a folder is added once; watching it comes later.
 - **Covers** (`src-tauri/src/thumbs.rs`): the first page in reading order, 400 pixels wide, made by averaging each area of the page, as JPEG at quality 85. Made in Rust the first time the library asks for `thumb://<id>`, at most two at a time, and kept in the cache folder under the volume's fingerprint, so a file changed in place gets a new cover and a moved one keeps its own. A first page Rust cannot decode (AVIF outside Linux) leaves a marker, so it is not tried again, and the library shows a placeholder.
 - **Where you left off.** Every file opened joins the library, and opens again at its page with its direction, page mode and cover (`src/core/library.ts`). The place is saved at once on the first change, then at most once a second, keeping the last of a burst of turns, and at once when the app goes to the background, the window is closed or another volume is opened: a closed window waits for that save before it goes. Reaching the last page marks a volume finished, and going back does not undo it.
@@ -285,17 +286,18 @@ We start with the viewer, because that's where all the problems of existing read
 
 **Rough estimates.** Estimates assume development by coding agents, with one person leading, testing and validating about 10 hours a week. The bottleneck is not writing code but testing it on devices and tuning gestures.
 
-| Milestone | First estimate | Actual or revised (end of M1) | Actual or revised (end of M3) |
-| --- | --- | --- | --- |
-| M0 + M0.5 | 1–2 weeks | **3 days** (Oct 31 – Nov 2, 2026) | |
-| M1 | 1–2 weeks | **6 days** (Nov 2 – Nov 7) | |
-| M2 | 3–5 weeks (biggest risk: tuning on real devices) | 2–3 weeks | **6 days** (Nov 7 – 13), the laptop trackpad left |
-| M2.5 | — (part of M5) | about 1 week, spike included | **3 days** (Nov 13 – 15) |
-| M2.6 | — (asked for during M2) | two or three days | **2 days** (Nov 16 – 17) |
-| M3 | 2–3 weeks | 2–3 weeks | **4 days** (Nov 17 – 20) |
-| M4 | 1–2 weeks | 1 week | 4–6 days |
-| M5 | 1–2 weeks | 1 week (CBR moved to M2.5) | 4–6 days, signed builds included |
-| **Total up to 0.1** (Windows, Linux, Android) | **about 3–4 months** | **about 7–10 weeks from now**: release 0.1 around January 2027 | **about 2 weeks from now**: release 0.1 in early December 2026 |
+| Milestone | First estimate | Actual or revised (end of M1) | Actual or revised (end of M3) | Actual or revised (end of M4) |
+| --- | --- | --- | --- | --- |
+| M0 + M0.5 | 1–2 weeks | **3 days** (Oct 31 – Nov 2, 2026) | | |
+| M1 | 1–2 weeks | **6 days** (Nov 2 – Nov 7) | | |
+| M2 | 3–5 weeks (biggest risk: tuning on real devices) | 2–3 weeks | **6 days** (Nov 7 – 13), the laptop trackpad left | |
+| M2.5 | — (part of M5) | about 1 week, spike included | **3 days** (Nov 13 – 15) | |
+| M2.6 | — (asked for during M2) | two or three days | **2 days** (Nov 16 – 17) | |
+| M3 | 2–3 weeks | 2–3 weeks | **4 days** (Nov 17 – 20) | |
+| M4 | 1–2 weeks | 1 week | 4–6 days | **3 days of work** (Nov 21, 22 and 24) |
+| Touch on the phone | — (asked for at the end of M4) | | | 1–2 days |
+| M5 | 1–2 weeks | 1 week (CBR moved to M2.5) | 4–6 days, signed builds included | 4–6 days |
+| **Total up to 0.1** (Windows, Linux, Android) | **about 3–4 months** | **about 7–10 weeks from now**: release 0.1 around January 2027 | **about 2 weeks from now**: release 0.1 in early December 2026 | **about 1–1.5 weeks from now**: release 0.1 in the first half of December 2026 |
 
 **Revision at the end of M1.** M0 to M1 took about 9 days instead of 2–4 weeks, with more than the assumed 10 hours a week of validation. Writing code was not the bottleneck; finding problems on real devices was. Every step of M1 hit something only a device showed: moire at the phone's real downscale ratio, fractional pixel densities resampling the page, Vite reloading the page on Android, quick taps lost to double-tap detection. So the revision keeps the device-heavy milestones wide:
 
@@ -306,7 +308,9 @@ We start with the viewer, because that's where all the problems of existing read
 
 **Revision at the end of M3.** M2 to M3 took 15 days instead of the 4–6 weeks revised after M1. The pace held because every step was tried on the three platforms the same day, by scripts driving the real app (real events on Windows, WebKitGTK in WSL, a real finger on the phone through adb), so the maintainer's time went to deciding, not to repeating checks. What took longest was not the features but what measuring them turned up: in M3 the memory of the decoded pages (an accelerated canvas keeps every page it ever drew), a scroll that stalled for half a second, two bugs of mine that only showed as numbers, and a graphics cache filled by the slides. M4 and M5 are lighter on that side: a cover grid, SQLite and a release are known ground; the risks left are thumbnails of solid CBR archives (each one a pass over the archive) and signing the Android and Windows builds.
 
-macOS and iOS add 1–3 weeks after 0.1. Next revision at the end of M4.
+**Revision at the end of M4.** M4 took three days of work against four to six. Two things went faster than planned: the spike answered the Android question on the first day, and the library is built from a few small pieces (a database, a cover maker, a screen) that could each be tried on the three platforms alone. What took time was again what only a device shows: the system picker's search on the phone keeps the app waiting 16 s (not Gutter's to fix), covers are made on the phone's slow cores, eight times slower than on its fast ones, and one test was started while the maintainer was using the phone. Before M5 the maintainer asked for a look at touch and scrolling on the phone, which feel less smooth than they should; it gets a row of its own. M5 keeps image folders, the release and the signed builds.
+
+macOS and iOS add 1–3 weeks after 0.1. Next revision at the end of M5.
 
 Open questions:
 
