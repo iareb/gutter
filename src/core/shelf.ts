@@ -30,6 +30,25 @@ export function status(entry: Entry): string {
   return entry.pages ? `Page ${entry.page + 1} of ${entry.pages}` : `Page ${entry.page + 1}`
 }
 
+/**
+ * Where a volume's file was, in words a reader knows: a path on a computer; on
+ * Android the folder and name inside the phone's storage ("Download/Saga 01.cbz")
+ * rather than a content:// address.
+ */
+export function whereItWas(address: string): string {
+  if (!address.startsWith('content://')) return address
+  let document: string
+  try {
+    document = decodeURIComponent(address.split('/document/').pop() ?? address)
+  } catch {
+    return address
+  }
+  if (document.startsWith('raw:'))
+    return document.slice(4).replace(/^\/storage\/emulated\/\d+\//, '')
+  const colon = document.indexOf(':')
+  return colon >= 0 ? document.slice(colon + 1) : document
+}
+
 /** A volume's name without the extension of its file: "Saga 01.cbz" is "Saga 01". */
 export function title(entry: Entry): string {
   return entry.name.replace(/\.(cbz|cbr|zip|rar|cb7)$/i, '') || entry.name

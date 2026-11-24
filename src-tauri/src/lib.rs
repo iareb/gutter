@@ -85,6 +85,7 @@ fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool {
         library::library_scan,
         library::library_remember_folder,
         library::library_folders,
+        library::library_missing,
         recording::save_recording
     ]
 }
@@ -102,6 +103,7 @@ fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool {
         library::library_add_many,
         library::library_scan,
         library::library_remember_folder,
-        library::library_folders
+        library::library_folders,
+        library::library_missing
     ]
 }

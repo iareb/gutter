@@ -1,7 +1,7 @@
 <script lang="ts">
   import { summary, type Report } from './core/adding'
   import { coverUrl, type Entry } from './core/library'
-  import { continueReading, newestFirst, progress, status, title } from './core/shelf'
+  import { continueReading, newestFirst, progress, status, title, whereItWas } from './core/shelf'
 
   type Props = {
     entries: Entry[]
@@ -9,14 +9,42 @@
     error?: string
     onopen: (entry: Entry) => void
     onremove: (entry: Entry) => void
+    /** Volumes whose file does not open now: shown greyed out. */
+    missing: Set<number>
+    /** Looks for the file of a volume that went away. */
+    onfind: (entry: Entry) => void
     /** What the last adding did, until it is closed. */
     report?: Report
     onclosereport: () => void
     onaddfiles: () => void
     onaddfolder: () => void
   }
-  let { entries, error, report, onopen, onremove, onclosereport, onaddfiles, onaddfolder }: Props =
-    $props()
+  let {
+    entries,
+    error,
+    missing,
+    report,
+    onopen,
+    onfind,
+    onremove,
+    onclosereport,
+    onaddfiles,
+    onaddfolder,
+  }: Props = $props()
+
+  /** The volume that went away whose dialog is open. */
+  let lost = $state<Entry>()
+
+  /**
+   * Closes the dialog of a volume that went away and acts on that volume. The volume
+   * is taken before the dialog closes: what the dialog shows lets go of it then (this
+   * once sent nothing to Find it).
+   */
+  function settle(act: (entry: Entry) => void) {
+    const entry = lost
+    lost = undefined
+    if (entry) act(entry)
+  }
 
   const reading = $derived(continueReading(entries))
   const all = $derived(newestFirst(entries))
@@ -24,7 +52,7 @@
   /** The volume whose menu is open (a long press or a right click). */
   let asked = $state<Entry>()
   /** Covers that could not be loaded: a plain card with the name instead. */
-  let missing = $state<Record<number, boolean>>({})
+  let noCover = $state<Record<number, boolean>>({})
 
   /**
    * Covers are asked for when their card comes near the screen, not all at once:
@@ -76,7 +104,8 @@
       pressed = false
       return
     }
-    onopen(entry)
+    if (missing.has(entry.id)) lost = entry
+    else onopen(entry)
   }
 
   function contextmenu(event: MouseEvent, entry: Entry) {
@@ -90,11 +119,11 @@
     asked = undefined
   }
 
-  // The menu closes on Escape
+  // The dialogs close on Escape
   $effect(() => {
-    if (!asked) return
+    if (!asked && !lost) return
     const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') asked = undefined
+      if (event.key === 'Escape') asked = lost = undefined
     }
     window.addEventListener('keydown', escape)
     return () => window.removeEventListener('keydown', escape)
@@ -105,6 +134,7 @@
   <button
     class="card"
     class:big
+    class:gone={missing.has(entry.id)}
     title={entry.name}
     onclick={() => click(entry)}
     oncontextmenu={(event) => contextmenu(event, entry)}
@@ -114,7 +144,7 @@
     onpointercancel={cancel}
   >
     <span class="cover">
-      {#if missing[entry.id]}
+      {#if noCover[entry.id]}
         <span class="placeholder">{title(entry)}</span>
       {:else}
         <img
@@ -122,7 +152,7 @@
           draggable="false"
           decoding="async"
           use:lazy={coverUrl(entry.id)}
-          onerror={() => (missing = { ...missing, [entry.id]: true })}
+          onerror={() => (noCover = { ...noCover, [entry.id]: true })}
         />
       {/if}
       {#if progress(entry) > 0}
@@ -130,7 +160,7 @@
       {/if}
     </span>
     <span class="name">{title(entry)}</span>
-    <small>{status(entry)}</small>
+    <small>{missing.has(entry.id) ? 'Missing: tap to find it' : status(entry)}</small>
   </button>
 {/snippet}
 
@@ -175,6 +205,26 @@
     </div>
   {/if}
 </div>
+
+{#if lost}
+  {@const entry = lost}
+  <div class="scrim" role="presentation" onclick={() => (lost = undefined)}></div>
+  <div class="dialog" role="dialog" aria-modal="true" aria-label="A comic that went away">
+    <p><strong>{title(entry)}</strong> cannot be found.</p>
+    <p><small>It was at {whereItWas(entry.address)}</small></p>
+    <p>
+      <small
+        >If you moved or renamed it, find it again: it keeps where you left it. Or remove it from
+        the library.</small
+      >
+    </p>
+    <div class="actions">
+      <button onclick={() => (lost = undefined)}>Cancel</button>
+      <button onclick={() => settle(onremove)}>Remove</button>
+      <button class="primary" onclick={() => settle(onfind)}>Find it…</button>
+    </div>
+  </div>
+{/if}
 
 {#if asked}
   <div class="scrim" role="presentation" onclick={() => (asked = undefined)}></div>
@@ -406,6 +456,26 @@
     gap: 10px;
     justify-content: flex-end;
     margin-top: 14px;
+  }
+
+  /* A volume whose file went away: there, but not to be read */
+  .card.gone .cover {
+    filter: grayscale(1);
+    opacity: 0.4;
+  }
+
+  .card.gone .name {
+    opacity: 0.6;
+  }
+
+  .dialog p small {
+    word-break: break-word;
+  }
+
+  .dialog .primary {
+    color: #fff;
+    background: #3a4690;
+    border-color: #4c59b0;
   }
 
   .dialog .danger {

@@ -36,9 +36,18 @@ export type Added = 'new' | 'known' | 'moved' | 'duplicate'
 export function addToLibrary(
   address: string,
   name: string | undefined,
-  pages: number,
+  pages?: number,
 ): Promise<[Entry, Added]> {
-  return invoke<[Entry, Added]>('library_add', { address, name: name ?? null, pages })
+  return invoke<[Entry, Added]>('library_add', {
+    address,
+    name: name ?? null,
+    pages: pages ?? null,
+  })
+}
+
+/** The volumes whose file does not open now: deleted, moved, renamed, or a permission lost. */
+export function missingVolumes(): Promise<number[]> {
+  return invoke<number[]>('library_missing')
 }
 
 /** Every volume of the library, the last opened first. */

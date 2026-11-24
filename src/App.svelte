@@ -34,6 +34,7 @@
     choicesFor,
     listLibrary,
     markOpened,
+    missingVolumes,
     PlaceSaver,
     removeFromLibrary,
     saveReading,
@@ -60,6 +61,8 @@
   let addBox = $state<HTMLDivElement>()
   /** Files are being dragged over the window. */
   let dragging = $state(false)
+  /** Volumes whose file does not open now, checked each time the library is read. */
+  let missing = $state.raw(new Set<number>())
   let volume = $state<Volume>()
   /** The reader's choices for every volume, saved as soon as they change. */
   const saved = loadSettings()
@@ -298,6 +301,38 @@
     } catch (e) {
       libraryError = String(e)
     }
+    // Each file is opened to see whether it is still there: after the list, not before it
+    void missingVolumes().then(
+      (ids) => (missing = new Set(ids)),
+      () => {},
+    )
+  }
+
+  /**
+   * Looks for the file of a volume that went away. The file picked is recognized by its
+   * fingerprint: the same comic takes its new address and keeps its place, and opens;
+   * a different one is added as a new volume, and the reader is told.
+   */
+  async function find(lost: Entry) {
+    let picked
+    try {
+      picked = await pickComic()
+    } catch (e) {
+      libraryError = String(e)
+      return
+    }
+    if (!picked) return
+    try {
+      const [found] = await addToLibrary(picked.address, picked.name)
+      if (found.id === lost.id) {
+        await open({ address: found.address, name: found.name })
+        return
+      }
+      libraryError = `${found.name} is not the comic that went away: it is in the library as another one.`
+    } catch (e) {
+      libraryError = String(e)
+    }
+    await refresh()
   }
   $effect(() => {
     void refresh().then(async () => {
@@ -428,8 +463,11 @@
       entry = undefined
       saver = undefined
       // Said where the reader is: on the library a volume that cannot be opened stays listed
-      if (screen === 'library') libraryError = String(e)
-      else error = String(e)
+      if (screen === 'library') {
+        libraryError = String(e)
+        // The file may have gone since the library was read: it shows greyed out now
+        void refresh()
+      } else error = String(e)
     } finally {
       busy = false
       blur()
@@ -710,6 +748,8 @@
       onopen={(e) => open({ address: e.address, name: e.name })}
       onremove={remove}
       {report}
+      {missing}
+      onfind={find}
       onclosereport={() => (report = undefined)}
       onaddfiles={() => add(pickFiles)}
       onaddfolder={() => add(pickFolder)}

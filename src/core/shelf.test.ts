@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Entry } from './library'
-import { continueReading, newestFirst, progress, status, title } from './shelf'
+import { continueReading, newestFirst, progress, status, title, whereItWas } from './shelf'
 
 let next = 1
 const entry = (more: Partial<Entry> = {}): Entry => ({
@@ -56,6 +56,21 @@ describe('the library screen', () => {
     expect(status(entry({ opened: 1, page: 22 }))).toBe('Page 23 of 40')
     expect(status(entry({ opened: 1, page: 2, pages: null }))).toBe('Page 3')
     expect(status(entry({ opened: 1, finished: true }))).toBe('Finished')
+  })
+
+  it('says where a file was in words a reader knows', () => {
+    expect(whereItWas('C:\\Comics\\Saga 01.cbz')).toBe('C:\\Comics\\Saga 01.cbz')
+    expect(
+      whereItWas(
+        'content://com.android.externalstorage.documents/tree/primary%3ADownload%2Fcomics/document/primary%3ADownload%2Fcomics%2FSaga%2001.cbz',
+      ),
+    ).toBe('Download/comics/Saga 01.cbz')
+    expect(
+      whereItWas(
+        'content://com.android.providers.downloads.documents/document/raw%3A%2Fstorage%2Femulated%2F0%2FDownload%2FSaga.cbz',
+      ),
+    ).toBe('Download/Saga.cbz')
+    expect(whereItWas('content://x/document/%E0%A4%A')).toBe('content://x/document/%E0%A4%A')
   })
 
   it('shows a name without the extension of the file', () => {

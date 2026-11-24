@@ -636,6 +636,33 @@ pub fn library_folders(library: State<Library>) -> Result<Vec<String>, String> {
     library.with(|conn| folders(conn))
 }
 
+/// The volumes whose file does not open now: deleted, moved or renamed outside the
+/// app, on a card taken out, or a permission lost. Opening is the only test that
+/// holds everywhere: on Android an address carries no path to look at.
+pub fn missing(conn: &Connection, opens: impl Fn(&str) -> bool) -> rusqlite::Result<Vec<i64>> {
+    let mut query = conn.prepare("SELECT id, address FROM volumes ORDER BY id")?;
+    let all: Vec<(i64, String)> = query
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(all
+        .into_iter()
+        .filter(|(_, address)| !opens(address))
+        .map(|(id, _)| id)
+        .collect())
+}
+
+/// See [`missing`]. Each file is opened and closed again, nothing is read.
+#[tauri::command]
+pub async fn library_missing(app: AppHandle) -> Result<Vec<i64>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let library = app.state::<Library>();
+        library.with(|conn| missing(conn, |address| open_address(&app, address).is_ok()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 pub fn library_list(library: State<Library>) -> Result<Vec<Entry>, String> {
     library.with(|conn| list(conn))
@@ -1102,5 +1129,17 @@ mod tests {
                 Ok(())
             })
             .unwrap();
+    }
+
+    #[test]
+    fn tells_the_volumes_whose_file_is_gone() {
+        let mut conn = db();
+        let (a, _) = add_gone(&mut conn, &file("here.cbz", "f1"), 1).unwrap();
+        let (b, _) = add_gone(&mut conn, &file("gone.cbz", "f2"), 2).unwrap();
+        let (c, _) = add_gone(&mut conn, &file("also gone.cbz", "f3"), 3).unwrap();
+        let gone = missing(&conn, |address| address == "here.cbz").unwrap();
+        assert_eq!(gone, [b.id, c.id]);
+        assert!(!gone.contains(&a.id));
+        assert!(missing(&conn, |_| true).unwrap().is_empty());
     }
 }
