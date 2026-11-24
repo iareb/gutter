@@ -180,8 +180,9 @@ The app has two screens: **Library** and **Reader**. While reading, the interfac
 
 **Library**
 
-- Grid of covers with a progress indicator.
-- "Continue reading" section at the top.
+- Grid of covers with a progress indicator. *Since M4:* every volume, the newest added first, two columns on a phone and as many as fit on a computer; a cover is shown whole, never cropped, and asked for only when its card comes near the screen.
+- "Continue reading" section at the top. *Since M4:* the last three volumes opened and not finished, each with its page and its bar.
+- *Since M4:* the app opens on the library. A tap opens a volume where it was left; the reader's bar has a "‹ Library" button, and Android's back gesture does the same (opening a volume adds an entry to the webview's history). A long press or a right click asks before removing a volume from the library; the file is never touched.
 - Add files or folders by drag and drop (desktop) or system picker (mobile). On Android a folder must be one inside `Download` or the storage, not those themselves: the system refuses them.
 
 **Style guidelines**
