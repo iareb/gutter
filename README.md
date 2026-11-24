@@ -25,7 +25,7 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 - The pages around the current one are prepared in advance, within a memory budget: the next page is on screen at once, and memory stays flat over a long reading session
 - Swipe to turn the page: it follows your finger with the next page beside it; a key, a tap or a wheel notch slide the pages too. One page per mouse notch and one per trackpad flick, even with its inertia
 - Left-to-right or right-to-left (manga) reading, from the View menu in the options bar
-- A library: the covers of every comic you opened, with how far you read each one, and "Continue reading" at the top
+- A library: the covers of every comic you added or opened, with how far you read each one, and "Continue reading" at the top. Add comics a few at a time, a whole folder with its subfolders, or drop them on the window on a computer; a comic moved or renamed is found again with its place. On Android a folder added once is looked through again each time the app opens
 - Every comic opens again where you left it, with the direction and page mode you read it with; a comic never opened takes your last choices. On Android a comic picked once stays readable after the app is closed, and the bar shows its name
 - Two pages side by side, with the cover alone if you like and wide pages (spreads) always alone
 - Vertical scroll (webtoon): the pages one under the other, fitted to the width; the wheel, the keys or a finger scroll it, with inertia, and it zooms with a pinch, Ctrl+wheel or a double tap
@@ -36,7 +36,7 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 ## Planned features
 
 - Image folders (JPEG, PNG, WebP, AVIF)
-- Adding many comics at once to the library: several files, whole folders, and dropping them on the window on a computer
+- Comics that went away: shown greyed out in the library, with a way to find them again
 
 Built with [Tauri 2](https://tauri.app), [Svelte 5](https://svelte.dev), TypeScript and Rust. See the [design document](docs/design.md) for the full plan.
 
