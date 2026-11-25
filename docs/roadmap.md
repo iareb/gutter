@@ -170,6 +170,26 @@ Until now Gutter opens one file at a time and forgets it when it closes. M4 make
 
 **Risks.** Android may not keep the right to read a file chosen once, and folder access may need code of our own on the Android side (4.1 finds out first). Thumbnails of solid CBR archives cost a pass over each archive. A library of hundreds of volumes needs a grid that does not lay out or decode all of them at once.
 
+## Between M4 and M5: touch on the phone
+
+At the end of M4 the maintainer found moving a zoomed page "laggy" and a fast vertical scroll a little jerky on the phone, the zoomed page the worse of the two, and asked first for a sensitivity setting. The lag was frames taking too long, which a sensitivity setting cannot change, so it was measured and fixed first; a setting for the speed of scrolling and flinging can come once it is smooth.
+
+**Measured** on the phone (90 Hz, frames of 11 ms) with a real finger through `adb`, the app's own drawing timed per frame, then a browser trace and a profile: the app's JavaScript took a few milliseconds, the browser's painting of the canvas the rest. Moving a zoomed strip in vertical scroll (the maintainer's mode): 38 frames over 25 ms, up to 300 ms. The canvas of vertical scroll lives in main memory (M3, for memory), and a strip zoomed past a page's own pixels is scaled up on it with the high-quality filter: 153 ms a frame, the same in a page made to test it alone. On that canvas no filter costs 16 ms, the quick one 23 ms, the medium one 65 ms.
+
+**Fixed:**
+
+- While the zoomed strip or page moves, a decode that has to be scaled is drawn with no filter (vertical scroll, main memory) or the quick one (page mode, graphics memory); 150 ms after it stops it is drawn again with the high-quality filter, so a page at rest is exactly what it was.
+- A decode drawn at the size it was made is copied with no filter at all (`needsScaling` in `core/fit.ts`): the high-quality filter cost time even then.
+- In page mode a pan draws once a frame, the last finger move only; a new page or a new decode is still drawn at once, so a turn is still timed as before.
+
+**After**, on the phone: a zoomed strip moved, 1 frame over 25 ms (the high-quality redraw once it is still, 178 ms, while nothing moves); a fast vertical scroll, longest frame 28 ms instead of 44 ms; a zoomed page in page mode, no frame over 25 ms. On Windows a turn is still ready in under 1 ms, a zoomed page moved by touch draws at 8 ms a frame, and a page or a strip moved and brought back shows the same pixels as before.
+
+**Zoom that does not depend on the fit** (asked for after the maintainer found vertical scroll on a computer "super zoomed" with no way back: the strip started as wide as the window and could not get narrower). The strip's zoom is its width against the screen's (`core/stripzoom.ts`): it starts as wide as the screen but never wider than a page's own pixels (100%), and zooms out to a column in the middle of about two pages in the screen's height, then in to 8×. A zoom the reader chooses (the buttons, + and -, pinch, Ctrl+wheel) is kept once for every volume; a double tap's is a look at a detail and is not; 0 and a click on the percentage go back to the start and forget it. The bar of the reader has − and + and the zoom against the page's own pixels between them, in every mode; in the page modes − stops at the whole page. Windows: 9 checks (a window 2400 wide: 100% and a column in the middle; − down to 15%; the zoom kept after a restart; the real window 1024 wide: 52%; the keys; page mode). Phone: 5 checks with real taps on the buttons (61% at the start, 49%, 77%, back to 61%; the buttons fit in the bar). Found while checking: before a page's size was known, the bound below a kept zoom was 1, and a kept column came back as wide as the window.
+
+**Measured before choosing how to make a fast vertical scroll smooth**, on the phone, the same real flicks through `adb`, judged by Android's own frame times for the app (`dumpsys gfxinfo`; 11 ms a frame at 90 Hz): the app as it is (the whole strip drawn each frame on a canvas in main memory), 50% of frames 11 ms, 90% 16 ms, 99% 21 ms; a prototype with the pages as layers (a canvas each, drawn once) moved by a transform, 5, 6 and 7 ms; a prototype with the same pages in the browser's own scrolling, 6, 6 and 11 ms. The prototypes decode nothing while scrolling, which the app does in Workers; what they show is that moving layers costs a few milliseconds a frame where drawing the strip costs all of it.
+
+**Left:** drawing the strip as layers moved by a transform, keeping the gestures, the zoom and the placement on whole pixels, and the layers of the pages far from the screen let go. To decide with the maintainer.
+
 ## M5 onwards
 
 Detailed steps are written at the end of the previous milestone.

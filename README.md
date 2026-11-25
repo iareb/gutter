@@ -20,7 +20,7 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 - One page at a time, at the screen's physical resolution: pages are downscaled in steps so fine patterns and screentones don't turn into moire, and drawn one image pixel per screen pixel
 - Pages redrawn sharp when the window is resized or the phone rotated
 - Turn pages with the arrow keys, Page Up/Down, Space, Home and End, or by tapping or clicking the left and right side of the page
-- Zoom up to 8× and pan: pinch, double tap or double click, Ctrl+wheel, keys `+` `-` `0`; the page is redrawn sharp at every zoom
+- Zoom up to 8× and pan: pinch, double tap or double click, Ctrl+wheel, keys `+` `-` `0`, or the − and + buttons in the bar, which shows the zoom against the page's own pixels; the page is redrawn sharp at every zoom
 - A slider in the options bar to go to any page; a zoomed page stays put: neither the wheel nor the arrows turn it, they only move it
 - The pages around the current one are prepared in advance, within a memory budget: the next page is on screen at once, and memory stays flat over a long reading session
 - Swipe to turn the page: it follows your finger with the next page beside it; a key, a tap or a wheel notch slide the pages too. One page per mouse notch and one per trackpad flick, even with its inertia
@@ -28,7 +28,7 @@ Free comic readers tend to blur pages, fight you on zoom and scroll, skip pages 
 - A library: the covers of every comic you added or opened, with how far you read each one, and "Continue reading" at the top. Add comics a few at a time, a whole folder with its subfolders, or drop them on the window on a computer; a comic moved or renamed is found again with its place, and one whose file went away shows greyed out, with where it was and a way to find it. On Android a folder added once is looked through again each time the app opens
 - Every comic opens again where you left it, with the direction and page mode you read it with; a comic never opened takes your last choices. On Android a comic picked once stays readable after the app is closed, and the bar shows its name
 - Two pages side by side, with the cover alone if you like and wide pages (spreads) always alone
-- Vertical scroll (webtoon): the pages one under the other, fitted to the width; the wheel, the keys or a finger scroll it, with inertia, and it zooms with a pinch, Ctrl+wheel or a double tap
+- Vertical scroll (webtoon): the pages one under the other, as wide as the window but never past the pages' own size, and as narrow a column as you like (kept for every comic); the wheel, the keys or a finger scroll it, with inertia, and it zooms with a pinch, Ctrl+wheel or a double tap
 - Pages in natural order (`page 2` before `page 10`), junk files skipped
 - JPEG, PNG, WebP and AVIF pages; AVIF is decoded in Rust where the system webview can't (Linux)
 - Clear messages for damaged, incomplete and password-protected files, and for damaged pages, while the rest of the comic stays readable
