@@ -242,6 +242,16 @@
     blur()
   }
 
+  /** The zoom of what is on screen against its own pixels: 100 shows them one to one. */
+  let zoomPercent = $state<number>()
+
+  /** The bar's zoom buttons, in every mode. */
+  function zoom(how: 'in' | 'out' | 'fit') {
+    if (view.mode === 'vertical') scroller?.zoomBy(how)
+    else viewer?.zoomBy(how)
+    blur()
+  }
+
   // The menu closes on a click or tap outside it, and on Escape
   $effect(() => {
     if (!menu) return
@@ -707,6 +717,15 @@
         {/if}
       </div>
       {#if volume}
+        <div class="zoom" role="group" aria-label="Zoom">
+          <button aria-label="Zoom out" onclick={() => zoom('out')}>−</button>
+          <button class="percent" title="Back to the start" onclick={() => zoom('fit')}
+            >{zoomPercent ?? 100}%</button
+          >
+          <button aria-label="Zoom in" onclick={() => zoom('in')}>+</button>
+        </div>
+      {/if}
+      {#if volume}
         <span class="title"
           >{title ?? 'Comic'} · {target ?? (unit ? unitLabel(unit) : page + 1)} / {volume.pages
             .length}</span
@@ -768,6 +787,7 @@
         reading={view.direction}
         onpage={(n) => (page = n)}
         onloading={(value) => (loading = value)}
+        onzoom={(p) => (zoomPercent = p)}
       />
     {/key}
     {#if stats}<Stats {store} />{/if}
@@ -780,6 +800,7 @@
       reading={view.direction}
       oninput={input}
       onloading={(value) => (loading = value)}
+      onzoom={(p) => (zoomPercent = p)}
     />
     {#if stats}<Stats {store} />{/if}
   {:else}
@@ -828,6 +849,22 @@
 
   .view {
     position: relative;
+  }
+
+  /* Zoom out, the zoom (a click goes back to the start), zoom in */
+  .zoom {
+    display: flex;
+    gap: 4px;
+  }
+
+  .zoom button {
+    min-width: 36px;
+    padding: 6px 8px;
+  }
+
+  .zoom .percent {
+    min-width: 4.2em;
+    font-variant-numeric: tabular-nums;
   }
 
   .menu .item {

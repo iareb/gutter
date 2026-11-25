@@ -1,6 +1,9 @@
 <script lang="ts">
-  // Vertical scroll: the pages one under the other, fitted to the width, with no
-  // gap (core/strip.ts). One canvas the size of the screen shows the part of the
+  // Vertical scroll: the pages one under the other, all as wide as the strip, with no
+  // gap (core/strip.ts). The strip starts as wide as the screen but never wider than
+  // a page's own pixels, and zooms from a column of about two pages in the screen's
+  // height to 8× (core/stripzoom.ts); a zoom the reader chooses is kept for every
+  // volume. One canvas the size of the screen shows the part of the
   // strip under it, drawn one image pixel per screen pixel; only the pages near
   // the screen are decoded, and the screen after the visible one is made ready
   // while the reader looks. A page not decoded yet is a dark placeholder of the
@@ -10,18 +13,27 @@
   // as it moves. A finger (or the mouse) drags the strip, and a finger lets it
   // go with inertia (core/fling.ts). A tap on the left or right quarter scrolls
   // a screen back or forward (mirrored in right-to-left reading, as in the page
-  // modes); a double tap in the middle zooms in 2× there, or back to the width.
-  // Pinch, Ctrl+wheel and + - 0 zoom the strip up to 8×; zoomed, it also moves
-  // sideways (Shift+wheel, a sideways wheel, or the drag). Keys come through key().
+  // modes); a double tap in the middle zooms in 2× there, or back. Pinch,
+  // Ctrl+wheel, + - 0 and the bar's buttons (zoomBy) zoom; wider than the screen,
+  // it also moves sideways (Shift+wheel, a sideways wheel, or the drag). Keys come
+  // through key().
   import { untrack } from 'svelte'
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
   import { listen } from '@tauri-apps/api/event'
-  import { fitPage, type Size } from './core/fit'
+  import { fitPage, needsScaling, type Size } from './core/fit'
   import { decay, FLING_START, FLING_STOP, Velocity } from './core/fling'
   import { fromPinch, type NativePinch } from './core/input'
   import type { Direction } from './core/navigation'
   import type { PageStore } from './core/pages'
   import { Strip } from './core/strip'
+  import {
+    loadStripZoom,
+    minZoom,
+    percent,
+    saveStripZoom,
+    startZoom,
+    stripLeft,
+  } from './core/stripzoom'
   import { MAX_ZOOM } from './core/view'
 
   type Props = {
@@ -36,8 +48,10 @@
     /** The page at the top of the screen changed. */
     onpage: (page: number) => void
     onloading?: (loading: boolean) => void
+    /** The zoom changed: against the page's own pixels, 100 shows them one to one. */
+    onzoom?: (percent: number) => void
   }
-  let { store, count, start, sizesSeen, reading, onpage, onloading }: Props = $props()
+  let { store, count, start, sizesSeen, reading, onpage, onloading, onzoom }: Props = $props()
 
   let box: HTMLDivElement
   let canvas: HTMLCanvasElement
@@ -54,9 +68,19 @@
   /** Sizes and decodes on their way, so that a frame does not ask for them again. */
   const asked = new SvelteSet<string>()
   let preloadTimer: ReturnType<typeof setTimeout> | undefined
-  /** How much the strip is enlarged (1: as wide as the screen), and how far it is moved sideways. */
-  let zoom = 1
+  /**
+   * The strip's width against the screen's (1: as wide; less: a column in the middle;
+   * more: wider, and moved sideways by panX). It starts as wide as the screen but no
+   * wider than a page's own pixels, unless the reader chose a zoom: that one is kept
+   * for every volume (core/stripzoom.ts).
+   */
+  let chosen = loadStripZoom()
+  let zoom = chosen ?? 1
+  /** The reader set the zoom (now, or before for every volume): laying out again keeps it. */
+  let touched = chosen !== undefined
   let panX = 0
+  /** The zoom last told to the bar. */
+  let told = -1
   /** The zoom is changing: pages are shown from the decodes there are, made again once it rests. */
   let zooming = false
   let zoomTimer: ReturnType<typeof setTimeout> | undefined
@@ -71,7 +95,25 @@
     }
 
   /** The strip's width at the current zoom. */
-  const stripWidth = (r: Size) => Math.round(r.width * zoom)
+  const stripWidth = (r: Size) => Math.max(1, Math.round(r.width * zoom))
+
+  /** A page's own size, to measure the zoom against: the one at the top of the screen. */
+  const pageSize = () => store.peekSize(strip.page) ?? store.peekSize(untrack(() => start))
+
+  /** The zoom the strip starts at, and comes back to with 0. */
+  function startOf(r: Size): number {
+    return startZoom(r.width, pageSize()?.width ?? 0)
+  }
+
+  /** The narrowest the strip can get. */
+  function lowest(r: Size): number {
+    const p = pageSize()
+    // Before any page's size is known there is nothing to bound it by but the floor
+    return p ? minZoom(r, p, startOf(r)) : 0.1
+  }
+
+  /** The strip is wider than the screen: it moves sideways. */
+  const wide = () => strip.stripWidth > (room()?.width ?? 0)
 
   /** Keeps the sideways position inside the strip. */
   function clampPan() {
@@ -82,6 +124,10 @@
   function relayout() {
     const r = room()
     if (!r) return
+    // The start depends on the window and on the pages, which may just have become known;
+    // a zoom the reader set stays, inside the bounds of these pages
+    if (!touched) zoom = startOf(r)
+    else if (!zooming) zoom = Math.min(Math.max(zoom, lowest(r)), MAX_ZOOM)
     strip.layout(stripWidth(r), r.height, (n) => store.peekSize(n))
     if (!started) {
       strip.jump(untrack(() => start))
@@ -118,6 +164,18 @@
   function schedule() {
     if (!frame) frame = requestAnimationFrame(draw)
   }
+
+  /**
+   * Where the strip was last drawn. Drawn somewhere else, it is moving: a decode that
+   * has to be scaled (zoomed past a page's own pixels, or while a new decode is on its
+   * way) is then scaled with no filter, which costs about what a copy does on this
+   * canvas in main memory. The high-quality filter took 150 ms a frame on a phone
+   * while a zoomed strip moved. Once the strip has been still for a moment it is
+   * drawn again with it.
+   */
+  let drawnAt = ''
+  let sharpTimer: ReturnType<typeof setTimeout> | undefined
+  const SHARP_AFTER_MS = 150
 
   /** The size a page is decoded at: the strip's width, never above the page's own pixels. */
   function targetOf(n: number): Size | undefined {
@@ -185,13 +243,26 @@
     // on Windows, against 372 MB); here only a screen of pixels goes to the screen
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!
     ctx.imageSmoothingQuality = 'high'
+    const at_ = `${strip.top},${panX},${strip.stripWidth}`
+    const moving = drawnAt !== '' && at_ !== drawnAt
+    drawnAt = at_
+    clearTimeout(sharpTimer)
+    if (moving) sharpTimer = setTimeout(schedule, SHARP_AFTER_MS)
     ctx.fillStyle = '#111113'
     ctx.fillRect(0, 0, r.width, r.height)
     const visible = strip.pagesAround(0, 0)
     const width = strip.stripWidth
-    // The part of the strip's width on screen: all of it unless zoomed
+    // A strip narrower than the screen is a column in the middle; a wider one shows
+    // the part of its width that panX has moved to
+    const left = stripLeft(r.width, width)
     const from = panX
-    const shown = Math.min(r.width, width - panX)
+    const shown = Math.min(r.width - left, width - panX)
+    const p = pageSize()
+    const pct = p ? percent(width, p.width) : -1
+    if (pct !== told && pct > 0) {
+      told = pct
+      onzoom?.(pct)
+    }
     let missing = false
     for (const n of visible) {
       const y = strip.offset(n) - strip.top
@@ -201,13 +272,14 @@
       const bitmap = (target && store.cached(n, target)) || store.anyBitmap(n)
       if (bitmap) {
         const sx = bitmap.width / width
-        ctx.drawImage(bitmap, from * sx, 0, shown * sx, bitmap.height, 0, y, shown, h)
+        ctx.imageSmoothingEnabled = !moving && needsScaling(sx, bitmap.height / h)
+        ctx.drawImage(bitmap, from * sx, 0, shown * sx, bitmap.height, left, y, shown, h)
         if (target && bitmap.width !== target.width) want(n)
         continue
       }
       missing = true
       ctx.fillStyle = '#1a1a1f'
-      ctx.fillRect(0, y, shown, h)
+      ctx.fillRect(left, y, shown, h)
       ctx.fillStyle = failures.has(n) ? '#e08a8a' : '#55555c'
       ctx.font = `${Math.round(14 * dpr)}px system-ui, sans-serif`
       ctx.textAlign = 'center'
@@ -308,53 +380,76 @@
     fling = requestAnimationFrame(tick)
   }
 
-  /** Moves the strip sideways, when zoomed, by physical pixels. */
+  /** Moves the strip sideways, when it is wider than the screen, by physical pixels. */
   function pan(dx: number) {
-    if (zoom === 1) return
+    if (!wide()) return
     panX += dx
     clampPan()
     schedule()
   }
 
   /**
-   * Enlarges the strip by `factor`, keeping the point (x, y) of the screen, in CSS
-   * pixels, under the same place of the page.
+   * Zooms the strip by `factor` (or `to` a zoom), keeping the point (x, y) of the
+   * screen, in CSS pixels, over the same place of the page. `keep`: the reader chose
+   * this zoom, and it is kept for every volume once it rests; a double tap's is a look
+   * at a detail, and is not.
    */
-  function zoomAt(factor: number, x: number, y: number) {
+  function zoomAt(factor: number, x: number, y: number, keep = true, to?: number) {
     const r = room()
-    if (!r || !Number.isFinite(factor) || factor <= 0) return
-    const next = Math.min(Math.max(zoom * factor, 1), MAX_ZOOM)
+    if (!r) return
+    const wanted = to ?? zoom * factor
+    if (!Number.isFinite(wanted) || wanted <= 0) return
+    const next = Math.min(Math.max(wanted, lowest(r)), MAX_ZOOM)
     if (next === zoom) return
     stop()
     store.busy()
     const px = x * dpr
     const py = y * dpr
     // Where the point is on the strip, as a fraction of its width and its height
-    const fx = (panX + px) / strip.stripWidth
+    const fx = (px - stripLeft(r.width, strip.stripWidth) + panX) / strip.stripWidth
     const fy = (strip.top + py) / Math.max(strip.total, 1)
     zoom = next
+    touched = true
+    if (keep) chosen = next
     strip.layout(stripWidth(r), r.height, (n) => store.peekSize(n))
     strip.setTop(fy * strip.total - py)
     goal = strip.top
-    panX = fx * strip.stripWidth - px
+    panX = fx * strip.stripWidth - px + stripLeft(r.width, strip.stripWidth)
     clampPan()
     zooming = true
     clearTimeout(zoomTimer)
     zoomTimer = setTimeout(() => {
       zooming = false
+      saveStripZoom(chosen)
       schedule()
     }, 200)
     schedule()
   }
 
+  const middle = (r: Size) => [r.width / dpr / 2, r.height / dpr / 2] as const
+
   /**
-   * Back to the width of the screen, keeping still the point (x, y) of the screen,
-   * by default its middle: the same point the keys zoom in on, so + then 0 comes back.
+   * Back to where the strip starts (as wide as the screen, no wider than the page's
+   * own pixels), keeping still the point (x, y) of the screen, by default its middle:
+   * the point the keys zoom on, so + then 0 comes back. The kept zoom is forgotten.
    */
-  function fitWidth(x?: number, y?: number) {
+  function toStart(x?: number, y?: number) {
     const r = room()
-    if (!r || zoom === 1) return
-    zoomAt(1 / zoom, x ?? r.width / dpr / 2, y ?? r.height / dpr / 2)
+    if (!r) return
+    chosen = undefined
+    saveStripZoom(undefined)
+    const [mx, my] = middle(r)
+    zoomAt(1, x ?? mx, y ?? my, false, startOf(r))
+    touched = false
+  }
+
+  /** Zoom in, zoom out, or back to the start: the bar's buttons. */
+  export function zoomBy(how: 'in' | 'out' | 'fit') {
+    const r = room()
+    if (!r) return
+    const [mx, my] = middle(r)
+    if (how === 'fit') toStart()
+    else zoomAt(how === 'in' ? 1.25 : 1 / 1.25, mx, my)
   }
 
   /** Scrolls by a fraction of the screen. */
@@ -382,7 +477,6 @@
   export function key(name: string, shift = false): boolean {
     const r = room()
     if (!r) return false
-    const middle = (factor: number) => zoomAt(factor, r.width / dpr / 2, r.height / dpr / 2)
     switch (name) {
       case 'ArrowDown':
         return (move(r.height / 8), true)
@@ -403,21 +497,21 @@
         schedule()
         return true
       case 'ArrowRight':
-        if (zoom > 1) return (pan(r.width * 0.3), true)
+        if (wide()) return (pan(r.width * 0.3), true)
         return (jumpTo(strip.page + 1), true)
       case 'ArrowLeft': {
-        if (zoom > 1) return (pan(-r.width * 0.3), true)
+        if (wide()) return (pan(-r.width * 0.3), true)
         // Back to the top of this page, or to the previous one when already there
         const atTop = strip.top === strip.offset(strip.page)
         return (jumpTo(atTop ? strip.page - 1 : strip.page), true)
       }
       case '+':
       case '=':
-        return (middle(1.5), true)
+        return (zoomBy('in'), true)
       case '-':
-        return (middle(1 / 1.5), true)
+        return (zoomBy('out'), true)
       case '0':
-        return (fitWidth(), true)
+        return (zoomBy('fit'), true)
     }
     return false
   }
@@ -440,7 +534,7 @@
         return
       }
       const sideways = event.shiftKey && event.deltaX === 0 ? event.deltaY : event.deltaX
-      if (sideways && zoom > 1) pan(sideways * lines * dpr)
+      if (sideways && wide()) pan(sideways * lines * dpr)
       if (event.shiftKey) return
       const css = event.deltaY * lines
       if (css) move(css * dpr * (r.height / dpr / 8 / 100))
@@ -578,8 +672,12 @@
     if (double) {
       lastTap = undefined
       // Out on the same point a double tap went in on
-      if (zoom > 1) fitWidth(p.x, p.y)
-      else zoomAt(2, p.x, p.y)
+      // Back to the zoom the reader reads at, or in on a detail, not kept
+      const base = chosen ?? startOf(r)
+      if (zoom > base * 1.01) {
+        zoomAt(1, p.x, p.y, false, base)
+        if (chosen === undefined) touched = false
+      } else zoomAt(2, p.x, p.y, false)
       return
     }
     lastTap = { t: now, p }

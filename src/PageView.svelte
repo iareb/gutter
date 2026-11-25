@@ -12,7 +12,7 @@
   // message in its place, and the other pages stay readable.
   import { untrack } from 'svelte'
   import type { Edges } from './core/gestures'
-  import { fitPage, type Size } from './core/fit'
+  import { fitPage, needsScaling, type Size } from './core/fit'
   import { listen } from '@tauri-apps/api/event'
   import {
     fromPinch,
@@ -56,8 +56,10 @@
     oninput: (event: InputEvent) => void
     /** Tells when the bytes of the page are being fetched: a page in a solid archive can take a while. */
     onloading?: (loading: boolean) => void
+    /** The zoom changed: against the pages' own pixels, 100 shows them one to one. */
+    onzoom?: (percent: number) => void
   }
-  let { store, unit, layout, reading, oninput, onloading }: Props = $props()
+  let { store, unit, layout, reading, oninput, onloading, onzoom }: Props = $props()
 
   let box: HTMLDivElement
   let canvas: HTMLCanvasElement
@@ -401,6 +403,12 @@
     }
   })
 
+  // The zoom against the pages' own pixels, for the bar
+  $effect(() => {
+    if (fit && original)
+      onzoom?.(Math.round((shownSize(fit, view.zoom).width / original.width) * 100))
+  })
+
   // Keep the view inside the page when the window changes
   $effect(() => {
     if (!fit || !room) return
@@ -409,20 +417,45 @@
   })
 
   // Draw the visible part: on every pan, and whenever a new decode arrives.
-  // While the old page slides out, the new one waits
+  // While the old page slides out, the new one waits. Once a frame at most: a
+  // finger sends several moves a frame, and only the last one is seen.
+  // While a zoomed page moves, a decode that has to be scaled (zoomed past the
+  // page's own pixels, or while a new decode is on its way) is scaled with the
+  // quick filter: the high-quality one took 150 ms a frame on a phone. The page
+  // is drawn again with the high-quality filter once it has been still for a moment
+  let drawnView: View | undefined
+  let drawnDecoded: ImageBitmap[] | undefined
+  let sharpTimer: ReturnType<typeof setTimeout> | undefined
+  const SHARP_AFTER_MS = 150
   $effect(() => {
     if (!leaving && decoded && screenSizes && fit && room) {
-      draw(canvas, decoded, screenSizes, fit, view, room, dpr)
-      if (turnPending) {
-        turnPending = false
-        store.turn = {
-          page: pages[0],
-          ms: performance.now() - Math.max(turnStart, leaveEnd),
-          ready: turnReady ?? false,
+      const moved = drawnDecoded === decoded && drawnView !== undefined && drawnView !== view
+      drawnView = view
+      drawnDecoded = decoded
+      const args = [canvas, decoded, screenSizes, fit, view, room, dpr] as const
+      if (!moved) {
+        // A new unit or a new decode: drawn now, a turn is timed up to here
+        clearTimeout(sharpTimer)
+        draw(...args)
+        if (turnPending) {
+          turnPending = false
+          store.turn = {
+            page: pages[0],
+            ms: performance.now() - Math.max(turnStart, leaveEnd),
+            ready: turnReady ?? false,
+          }
         }
+        return
       }
+      const frame = requestAnimationFrame(() => {
+        clearTimeout(sharpTimer)
+        draw(...args, 0, 'low')
+        sharpTimer = setTimeout(() => draw(...args), SHARP_AFTER_MS)
+      })
+      return () => cancelAnimationFrame(frame)
     }
   })
+  $effect(() => () => clearTimeout(sharpTimer))
 
   // Once the current unit is on screen, get the ones around it ready: two ahead
   // and one behind, the other way round when going back
@@ -497,6 +530,7 @@
     room: Size,
     dpr: number,
     dx = 0,
+    quality: CanvasRenderingContext2D['imageSmoothingQuality'] = 'high',
   ) {
     const shown = shownSize(fit, view.zoom)
     const r = visibleRect(view, shown, room)
@@ -519,8 +553,10 @@
     // The size can still be a hair off: nearest-neighbor keeps that from blurring the page
     canvas.style.imageRendering = 'pixelated'
 
-    const ctx = canvas.getContext('2d')!
-    ctx.imageSmoothingQuality = 'high'
+    // On the graphics memory, said outright: the screen's canvas, unlike those that make
+    // the pages, is drawn every frame while a page moves, and scales fast there
+    const ctx = canvas.getContext('2d', { willReadFrequently: false })!
+    ctx.imageSmoothingQuality = quality
     ctx.clearRect(0, 0, r.width, r.height)
     // Each page covers its own strip of the unit. Its decode is the strip's size, or
     // smaller while a new decode is on its way or when zoomed past the original:
@@ -532,6 +568,7 @@
       const bitmap = bitmaps[i]
       const sx = bitmap.width / part.width
       const sy = bitmap.height / shown.height
+      ctx.imageSmoothingEnabled = needsScaling(sx, sy)
       ctx.drawImage(
         bitmap,
         (from - part.x) * sx,

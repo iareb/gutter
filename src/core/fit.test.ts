@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fitPage } from './fit'
+import { fitPage, needsScaling } from './fit'
 
 const page = { width: 2000, height: 3000 }
 
@@ -20,5 +20,18 @@ describe('fitPage', () => {
   it('never upscales past the original', () => {
     expect(fitPage(page, { width: 1000, height: 1000 }, 3)).toEqual(page)
     expect(fitPage(page, { width: 400, height: 1000 }, 1, 10)).toEqual(page)
+  })
+})
+
+describe('needsScaling', () => {
+  it('copies a decode made at the size shown', () => {
+    expect(needsScaling(1, 1)).toBe(false)
+    // A page 3056 pixels high shown 3055 high: the height rounded to whole pixels
+    expect(needsScaling(1, 3056 / 3055)).toBe(false)
+  })
+
+  it('scales a decode of another size', () => {
+    expect(needsScaling(0.5, 0.5)).toBe(true)
+    expect(needsScaling(1, 1.02)).toBe(true)
   })
 })
